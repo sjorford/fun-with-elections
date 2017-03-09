@@ -2,7 +2,7 @@
 // @name        Democracy Club downloads
 // @namespace   sjorford@gmail.com
 // @include     https://candidates.democracyclub.org.uk/help/api
-// @version     2017-03-05
+// @version     2017-03-09
 // @grant       none
 // @require     https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js
 // @require     https://cdnjs.cloudflare.com/ajax/libs/PapaParse/4.1.4/papaparse.min.js
@@ -13,18 +13,21 @@
 // Testing parameters
 var defaultElection = 'all';
 //defaultElection = 'Copeland';
-//defaultElection = '2017 Northern Ireland';
+defaultElection = '2017 Northern Ireland';
 //defaultElection = '2015 General Election';
 
 // Global variables
 var data = null;
-var maxTableRows = 100;
-maxTableRows = 1000; // TODO: add options for this
+var maxTableRows = 100; // TODO: add options for this
+//maxTableRows = 1000;
+//maxTableRows = 10000;
+//maxTableRows = 100000;
 var pageNo = 1;
 var maxPageNo = 1;
 var sortColumn, sortOrder;
 var allCandidatesUrl = 'https://candidates.democracyclub.org.uk/media/candidates-all.csv';
 var url = '';
+var tableColumns = {};
 
 // Styles
 $('<style>\
@@ -48,7 +51,9 @@ $('<style>\
 	.sjo-api-cell-party_list_position, .sjo-api-cell-_elected_icon {display: none;}\
 	.sjo-api-table-has-party-lists .sjo-api-cell-party_list_position {display: table-cell;}\
 	.sjo-api-table-has-results .sjo-api-cell-_elected_icon {display: table-cell;}\
-	#sjo-api-table-dupes tbody {border-top: 1px black solid;}\
+	.sjo-api-row-elected {background-color: #fbf2af;}\
+	#xxxsjo-api-table-dupes tbody {border-top: 1px black solid;}\
+	.sjo-api-dupes-row-0 {border-top: 1px black solid;}\
 </style>').appendTo('head');
 
 // Import stylesheet for dropdowns
@@ -57,7 +62,7 @@ $('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chosen/1.
 // Available fields
 var dataFields = {
 	
-	'id':							{'display': 'ID',			'sort': '#',			},
+	'id':							{'display': 'ID',									'sort': '#',			},
 	'name':							{'display': 'Name',			'filter': true,			'link': '/person/@@id@@'},
 	'honorific_prefix':				{},
 	'honorific_suffix':				{},
@@ -71,16 +76,18 @@ var dataFields = {
 	'mapit_url':					{},
 	'elected':						{},
 	
-	// TODO: generate computed fields
-	'email':						{							'abbr': '@',			},
-	'twitter_username':				{							'abbr': 'tw',			'link': '//twitter.com/@@twitter_username@@'},
-	'facebook_page_url':			{							'abbr': 'fbc',			'link': '@@facebook_page_url@@'},
-	'party_ppc_page_url':			{							'abbr': 'ppc',			'link': '@@party_ppc_page_url@@'},
-	'facebook_personal_url':		{							'abbr': 'fbp',			'link': '@@facebook_personal_url@@'},
-	'homepage_url':					{							'abbr': 'hp',			'link': '@@homepage_url@@'},
-	'wikipedia_url':				{							'abbr': 'wp',			'link': '@@wikipedia_url@@'},
-	'linkedin_url':					{							'abbr': 'li',			'link': '@@linkedin_url@@'},
+	// Contact fields
+	// TODO: highlight links that appear to be on the wrong domain
+	'email':						{'display': 'Email',		'abbr': '@',			},
+	'twitter_username':				{'display': 'Twitter',		'abbr': 'tw',			'link': '//twitter.com/@@twitter_username@@'},
+	'facebook_personal_url':		{'display': 'FB profile',	'abbr': 'fbp',			'link': '@@facebook_personal_url@@'},
+	'facebook_page_url':			{'display': 'FB page',		'abbr': 'fbc',			'link': '@@facebook_page_url@@'},
+	'homepage_url':					{'display': 'Homepage',		'abbr': 'hp',			'link': '@@homepage_url@@'},
+	'wikipedia_url':				{'display': 'Wikipedia',	'abbr': 'wp',			'link': '@@wikipedia_url@@'},
+	'linkedin_url':					{'display': 'LinkedIn',		'abbr': 'li',			'link': '@@linkedin_url@@'},
+	'party_ppc_page_url':			{'display': 'Party page',	'abbr': 'ppc',			'link': '@@party_ppc_page_url@@'},
 	
+	// Other fields
 	'image_url':					{},
 	'proxy_image_url_template':		{},
 	'image_copyright':				{},
@@ -100,8 +107,8 @@ var dataFields = {
 	'_row':							{'display': '#',									'sort': '#',			},
 	'_election_type':				{'display': 'Type',			'filter': true, 		},
 	'_election_group':				{'display': 'Group',		'filter': true, 		},
-	'_year':						{'display': 'Year',			'filter': true, 		'sort': '#',			},
-	'_age':							{'display': 'Age',									}, // TODO: fix sorting of ages outside the range 10-99
+	'_election_year':				{'display': 'Year',			'filter': true, 		'sort': '#',			},
+	'_age_at_election':				{'display': 'Age',									},
 	'_gender_icon':					{													'icon': true,			},
 	'_image_icon':					{													'icon': true,			},
 	'_elected_icon':				{													'icon': true,			},
@@ -115,6 +122,7 @@ var dataFields = {
 };
 
 // Fields to be displayed
+// TODO: add options for these
 var tableFields = [
 	'id',
 	'name',
@@ -123,25 +131,26 @@ var tableFields = [
 	//'_last_name',
 	//'_suffix',
 	'election_date',
-	'_year',
+	'_election_year',
 	'_country',
 	'_election_type',
 	'post_label',
 	'party_list_position',
-	//'party_id',
+	'party_id',
 	'party_name',
 	
-/*	'email',
-	'twitter_username',
-	'facebook_personal_url',
-	'facebook_page_url',
-	'homepage_url',
-	'wikipedia_url',
-	'linkedin_url',
-	'party_ppc_page_url', */
+	'has:email',
+	'has:twitter_username',
+	'has:facebook_personal_url',
+	'has:facebook_page_url',
+	'has:homepage_url',
+	'has:wikipedia_url',
+	'has:linkedin_url',
+	'has:party_ppc_page_url',
 	
-	//'birth_date',
-	//'_age',
+	//'wikipedia_url',
+	'birth_date',
+	'_age_at_election',
 	'_gender_icon',
 	'_image_icon',
 	'_elected_icon',
@@ -150,7 +159,11 @@ var tableFields = [
 // Initialize page
 $(function() {
 	window.console.log('initialize');
-		
+	
+	// Parse field definitions
+	//$.each(dataFields, (key, field) => field.name = key);
+	tableColumns = tableFields.map(fieldName => fieldName.indexOf('has:') === 0 ? {'name': fieldName.slice(4), 'has': true} : {'name': fieldName, 'has': false});
+	
 	// Insert wrapper at top of page
 	var wrapper = $('<div id="sjo-api-wrapper"></div>').prependTo('.content');
 	
@@ -211,12 +224,14 @@ $(function() {
 	
 	// Create table
 	// TODO: specify fixed widths to stop table from jumping
-	window.console.log('initialize', tableFields);
+	window.console.log('initialize', tableColumns);
+	var headerCellsHtml = tableColumns.map(column => 
+		'<th class="sjo-api-cell-' + (column.has ? '__has_' : '') + column.name + '">' + 
+			(dataFields[column.name].display && !column.has ? escapeHtml(dataFields[column.name].display) : '\u00B7') + '</th>');
+	//window.console.log(headerCellsHtml);
 	var table = $('<table id="sjo-api-table"><thead>' +
-		'<tr id="sjo-api-row-header">' + tableFields.map(fieldName => 
-			'<th class="sjo-api-cell-' + fieldName + '">' + 
-				(dataFields[fieldName].display ? escapeHtml(dataFields[fieldName].display) : '\u00B7') + '</th>').join('') + '</tr>' +
-		'<tr id="sjo-api-row-filter">' + tableFields.map(fieldName => '<td class="sjo-api-cell-' + fieldName + '"></td>').join('') + '</tr>' +
+		'<tr id="sjo-api-row-header">' + headerCellsHtml.join('') + '</tr>' +
+		'<tr id="sjo-api-row-filter">' + tableColumns.map(column => '<td class="sjo-api-cell-' + (column.has ? '__has_' : '') + column.name + '"></td>').join('') + '</tr>' +
 		'</thead><tbody></tbody></table>').appendTo(wrapper).hide();
 	
 	// Paging buttons
@@ -310,7 +325,7 @@ function parseComplete(results) {
 	}
 	
 	// Set initial sort
-	sortColumn = tableFields.indexOf('_row');
+	sortColumn = tableFields.indexOf('_row'); // ************************
 	sortOrder = 1;
 	window.console.log('parseComplete', sortColumn, sortOrder);
 	updateSortIcon();
@@ -323,6 +338,9 @@ function parseComplete(results) {
 // TODO: make a class
 function cleanData(index, candidate) {
 	//window.console.log('cleanData', candidate);
+	
+	// Initialise filter status array
+	candidate.__filters = [];
 	
 	// Row number
 	candidate._row = index + 1;
@@ -367,16 +385,17 @@ function cleanData(index, candidate) {
 	// TODO: region
 	
 	// Election year and age at election
-	candidate._year = parseInt(candidate.election_date.substr(0, 4));
+	// TODO: fix sorting of ages outside the range 10-99
+	candidate._election_year = parseInt(candidate.election_date.substr(0, 4));
 	if (candidate.birth_date) {
 		if (candidate.birth_date.length == 4) {
-			var ageThisYear = candidate._year - candidate.birth_date;
-			candidate._age = (ageThisYear - 1) + '-' + ageThisYear;
+			var ageThisYear = candidate._election_year - candidate.birth_date;
+			candidate._age_at_election = (ageThisYear - 1) + '-' + ageThisYear;
 		} else {
-			candidate._age = '' + moment(candidate.election_date).diff(moment(candidate.birth_date), 'years');
+			candidate._age_at_election = '' + moment(candidate.election_date).diff(moment(candidate.birth_date), 'years');
 		}
 	} else {
-		candidate._age = '';
+		candidate._age_at_election = '';
 	}
 	
 	// Icon columns
@@ -412,35 +431,52 @@ function cleanData(index, candidate) {
 	candidate._middle_name = nameMatch[3] ? nameMatch[3] : '';
 	
 	// Party group
+	// TODO: group "Independent" parties together
 	candidate._party_group = 
 		partyGroups[candidate.party_id] ? partyGroups[candidate.party_id] : 
-		candidate.party_id == 'ynmp-party:2' ? null :
+		//candidate.party_id == 'ynmp-party:2' ? null :
+		candidate.party_name.indexOf('Independent') >= 0 ? 'Independent' :
 		candidate.party_name;
-	
-	// Initialise filter status array
-	candidate.__filters = [];
 	
 }
 
+// TODO: improve this
+// TODO: build this from real data
 var partyGroups = {
-	'party:53':				'Lab/TUSC',
-	'party:804':			'Lab/TUSC',
-	'party:2045':			'Lab/TUSC',
-	'party:4087':			'Lab/TUSC',
-	'joint-party:53-119':	'Lab/TUSC',
-	'joint-party:804-2045':	'Lab/TUSC',
-	'party:51':				'Con/UUP/TUV',
-	'party:52':				'Con/UUP/TUV',
-	'party:83':				'Con/UUP/TUV',
-	'party:680':			'Con/UUP/TUV',
+	
+	// Labour, TUSC, Left Unity
+	'party:53':				'Labour',
+	'party:804':			'Labour',
+	'party:2045':			'Labour',
+	'party:4087':			'Labour',
+	'joint-party:53-119':	'Labour',
+	'joint-party:804-2045':	'Labour',
+	
+	// Conservative, UUP, TUV
+	'party:51':				'Conservative',
+	'party:52':				'Conservative',
+	'party:83':				'Conservative',
+	'party:680':			'Conservative',
+	
+	// UKIP, English Democrats, National Front, AIFE
+	// TODO: add BNP
+	'party:17':				'UKIP',
 	'party:84':				'UKIP',
 	'party:85':				'UKIP',
+	//'party:106':			'UKIP',
+	'party:117':			'UKIP',
+	'party:1918':			'UKIP',
+	
+	// Green
 	'party:63':				'Green',
 	'party:130':			'Green',
 	'party:305':			'Green',
+	
+	// Cista
 	'party:2552':			'Cista',
 	'party:2724':			'Cista',
 	'party:6335':			'Cista',
+	
 };
 
 // Truncate the data table
@@ -470,18 +506,18 @@ function buildFilters() {
 			
 		// Loop through filterable fields
 		var values;
-		$.each(tableFields, (column, fieldName) => {
-			var field = dataFields[fieldName];
+		$.each(tableColumns, (col, column) => {
+			var field = dataFields[column.name];
 			if (!field.filter) return;
 			
 			// Build list of filter options
 			values = [];
 			$.each(data, (index, candidate) => {
-				if (values.indexOf(candidate[fieldName]) < 0) {
-					values.push(candidate[fieldName]);
+				if (values.indexOf(candidate[column.name]) < 0) {
+					values.push(candidate[column.name]);
 					
 					// Add wildcard options
-					if (fieldName == '_election_type' && url == allCandidatesUrl && candidate._election_group != candidate._election_type) {
+					if (column.name == '_election_type' && url == allCandidatesUrl && candidate._election_group != candidate._election_type) {
 						if (values.indexOf(candidate._election_group + '.*') < 0) {
 							values.push(candidate._election_group + '.*');
 						}
@@ -497,10 +533,10 @@ function buildFilters() {
 			// Add dropdown to table header
 			$('<select multiple class="sjo-api-filter' + 
 				(!field['filter-width'] ? ' sjo-api-filter-width-auto' : '') + 
-				'" id="sjo-api-filter-' + fieldName + '">' + 
+				'" id="sjo-api-filter-' + column.name + '">' + 
 					values.sort().map(value => '<option>' + escapeHtml(value) + '</option>').join('') + 
 				'</select>')
-				.appendTo(cells[column]);
+				.appendTo(cells[col]);
 			
 		});
 			
@@ -521,20 +557,20 @@ function applyFilters(init) {
 		// Get filter parameters
 		var filter = $(element);
 		var values = filter.val();
-		var column = filter.closest('td').prop('cellIndex');
-		var fieldName = tableFields[column];
-		window.console.log('applyFilters', column, fieldName, values, filter);
+		var colIndex = filter.closest('td').prop('cellIndex');
+		var column = tableColumns[colIndex];
+		window.console.log('applyFilters', colIndex, column, values, filter);
 		
 		// Parse numeric values
 		// TODO: rename "sort" as something like "type"
-		if (values && dataFields[fieldName].sort == '#') {
+		if (values && dataFields[column.name].sort == '#') {
 			values = values.map(value => value === '' ? '' : parseInt(value));
 		}
 		
 		// Update the data set with the filter value
 		$.each(data, (index, candidate) => {
-			candidate.__filters[column] = values === null || values.indexOf(candidate[fieldName]) >= 0 || 
-				(fieldName == '_election_type' && values.indexOf(candidate[fieldName].split('.')[0] + '.*') >= 0);
+			candidate.__filters[colIndex] = values === null || values.indexOf(candidate[column.name]) >= 0 || 
+				(column.name == '_election_type' && values.indexOf(candidate[column.name].split('.')[0] + '.*') >= 0);
 		});
 		
 		// Hide extra space in dropdowns
@@ -547,7 +583,7 @@ function applyFilters(init) {
 	var current = $('#sjo-api-current').is(':checked') && url == allCandidatesUrl;
 	window.console.log('applyFilters', current);
 	$.each(data, (index, candidate) => {
-		candidate.__filters[tableFields.length] = current ? candidate.election_current : true;
+		candidate.__filters[tableColumns.length] = current ? candidate.election_current : true;
 	});
 	
 	// Render table
@@ -556,21 +592,14 @@ function applyFilters(init) {
 }
 
 // Sort data on selected column
-function sortData(column) {
-	window.console.log('sortData', column);
+function sortData(col) {
+	window.console.log('sortData', col);
 	
-	var fieldName = tableFields[column];
-	var field = dataFields[fieldName];
-	
-	// Check if field should be sorted by another field
-	if (field.sort && field.sort != '#') {
-		fieldName = field.sort;
-		column = tableFields.indexOf(fieldName);
-		field = dataFields[fieldName];
-	}
+	var column = tableColumns[col];
+	var field = dataFields[column.name];
 	
 	// Reverse sort if column is already sorted
-	sortOrder = column == sortColumn ? -sortOrder : 1;
+	sortOrder = col == sortColumn ? -sortOrder : 1;
 	sortColumn = column;
 	window.console.log('sortData', sortColumn, sortOrder, field);
 	
@@ -581,20 +610,21 @@ function sortData(column) {
 	data.sort(function(a, b) {
 		
 		// Sort blanks last
-		if (a[fieldName] === '' && b[fieldName] === '') return a.__index - b.__index;
-		if (a[fieldName] === '') return +1;
-		if (b[fieldName] === '') return -1;
+		if (a[column.name] === '' && b[column.name] === '') return a.__index - b.__index;
+		if (a[column.name] === '') return +1;
+		if (b[column.name] === '') return -1;
 		
 		// Don't sort abbreviation fields
-		if (field.abbr) return a.__index - b.__index;
+		if (column.has) return a.__index - b.__index;
 		
-		if (a[fieldName] == b[fieldName]) return a.__index - b.__index;
+		// If values are the same, keep in current order
+		if (a[column.name] == b[column.name]) return a.__index - b.__index;
 		
-		// Sort numbers correctly
+		// Sort numbers and strings correctly
 		if (field.sort == '#') {
-			return sortOrder * (a[fieldName] - b[fieldName]);
+			return sortOrder * (a[column.name] - b[column.name]);
 		} else {
-			return sortOrder * a[fieldName].localeCompare(b[fieldName], {'sensitivity': 'base', 'ignorePunctuation': true});
+			return sortOrder * a[column.name].localeCompare(b[column.name], {'sensitivity': 'base', 'ignorePunctuation': true});
 		}
 		
 	});
@@ -706,29 +736,8 @@ function buildTableRows() {
 		// Show only selected page
 		if (numRowsMatched >= startRowNo && numRowsMatched < endRowNo) {
 			
-			// Build cells HTML
-			var cellsHtml = tableFields.map(function(fieldName) {
-				var field = dataFields[fieldName];
-				var cellHtml;
-				if (candidate[fieldName] === '' || candidate[fieldName] === null || candidate[fieldName] === undefined) {
-					cellHtml = '';
-				} else {
-					cellHtml = field.abbr ? field.abbr : field.format == 'html' ? candidate[fieldName] : escapeHtml(candidate[fieldName]);
-					if (field.link) {
-						var href = field.link;
-						var match;
-						while (match = href.match(/^(.*?)@@(.*?)@@(.*)$/)) {
-							href = match[1] + candidate[match[2]] + match[3];
-						}
-						cellHtml = '<a href="' + href + '">' + cellHtml + '</a>';
-					}
-				}
-				cellHtml = '<td class="sjo-api-cell-' + fieldName + (field.icon ? ' sjo-cell-icon' : '') + '">' + cellHtml + '</td>';
-				return cellHtml;
-			}).join('');
-			
 			// Add row to table body
-			bodyHtml += '<tr' + (candidate.elected ? ' class="sjo-api-row-elected"' : '') + '>' + cellsHtml + '</tr>';
+			bodyHtml += '<tr' + (candidate.elected ? ' class="sjo-api-row-elected"' : '') + '>' + buildTableRowCells(candidate).join('') + '</tr>';
 			numRowsDisplayed++;
 			
 		}
@@ -749,17 +758,58 @@ function buildTableRows() {
 	
 }
 
+// Build cells for a single table row
+function buildTableRowCells(candidate) {
+	
+	// Loop through columns
+	var cellsHtml = tableColumns.map(column => {
+		
+		// Get field and value
+		var field = dataFields[column.name];
+		var cellHtml;
+		
+		// Ignore blank values
+		if (candidate[column.name] === '' || candidate[column.name] === null || candidate[column.name] === undefined) {
+			cellHtml = '';
+		} else {
+			
+			// Render display value
+			cellHtml = column.has ? field.abbr : field.format == 'html' ? candidate[column.name] : escapeHtml(candidate[column.name]);
+			
+			// Build links
+			if (field.link) {
+				var href = field.link;
+				var match;
+				while (match = href.match(/^(.*?)@@(.*?)@@(.*)$/)) {
+					href = match[1] + candidate[match[2]] + match[3];
+				}
+				cellHtml = '<a href="' + href + '">' + cellHtml + '</a>';
+			}
+			
+		}
+		
+		// Build table cell
+		cellHtml = '<td class="sjo-api-cell-' + (column.has ? '__has_' : '') + column.name + (field.icon ? ' sjo-cell-icon' : '') + '">' + cellHtml + '</td>';
+		return cellHtml;
+		
+	});
+	
+	return cellsHtml;
+	
+}
+
 // Sort available filters at the top, and grey out others
 function tidyFilters() {
 	window.console.log('tidyFilters');
 	
 	// Go through all filterable fields
-	$.each(tableFields, (fieldIndex, fieldName) => {
-		var field = dataFields[fieldName];
+	// TODO: make this loop the same as buildFilters, or vice versa
+	$.each(tableColumns, (colIndex, column) => {
+		var field = dataFields[column.name];
 		if (!field.filter) return;
 		
 		// Get the dropdown for this field
-		var dropdown = $('#sjo-api-filter-' + fieldName);
+		var dropdown = $('#sjo-api-filter-' + (column.has ? '__has_' : '') + column.name);
 		if (dropdown.length === 0) return;
 		window.console.log('tidyFilters', dropdown.val(), dropdown);
 		
@@ -775,13 +825,13 @@ function tidyFilters() {
 			// Go through data and find values that are valid when accounting for other filters
 			var values = [];
 			$.each(data, function(index, candidate) {
-				if (candidate.__filters.every((value, filterIndex) => filterIndex == fieldIndex || value)) {
-					values.push(candidate[fieldName]);
+				if (candidate.__filters.every((value, filterIndex) => filterIndex == colIndex || value)) {
+					values.push(candidate[column.name]);
 				}
 			});
 			
 			// Sort the available options at the top
-			var validOptions = options.filter((index, element) => values.indexOf(element.value) >= 0);
+			var validOptions = options.filter((index, option) => values.indexOf(option.value) >= 0);
 			dropdown.prepend(validOptions);
 			options.not(validOptions).addClass('sjo-api-filter-unavailable');
 		}
@@ -794,8 +844,6 @@ function tidyFilters() {
 }
 
 // Find likely duplicates
-// TODO: weight by region
-// TODO: include party ID
 function findDuplicates() {
 	window.console.log('findDuplicates');
 	
@@ -803,68 +851,51 @@ function findDuplicates() {
 	var table = $('#sjo-api-table-dupes').empty();
 	
 	// Loop through 2017 candidacies
-	var groups = 0;
+	var groups = [];
 	var processed = [];
-	var unmatched = data.map(candidate => ({'candidate': candidate}));
+	var unmatched = data.map(candidate => $.extend({}, candidate));
 	var index = 0;
 	checkData();
 	
+	// Check the next candidate in the data set
 	function checkData() {
-		var element = unmatched[index];
+		var candidate = unmatched[index];
 		//window.console.log(index, element);
+		$('#sjo-api-status-dupes').text('Checking ' + (index + 1) + ' of ' + (data.length) + '; ' + groups.length + ' groups found');
 		
-		$('#sjo-api-status-dupes').text('Checking ' + (index + 1) + ' of ' + (data.length) + '; ' + groups + ' groups found');
-		
-		var candidate = element.candidate;
-		if (!element.matched && candidate._year == 2017) {
+		// Start with an unmatched 2017 candidate
+		if (!candidate.__matched && candidate._election_year == 2017) {
 			
-			// Add this candidate to pending list
-			element.matched = true;
-			var pending = [element];
+			// Add this candidate to the pending list
+			candidate.__matched = true;
+			var pending = [candidate];
 			var matches = [];
 			var found = false;
 			//window.console.log(candidate);
+			window.console.log(candidate, pending, matches);
 			
-			// Process each candidate matching this one
+			// Work through the pending list, adding more as we go
 			while (pending.length > 0) {
-				var element1 = pending.pop();
-				var c1 = element1.candidate;
-				matches.push(element1);
+				var c1 = pending.pop();
+				matches.push(c1);
 				
-				// Loop through all unprocessed candidacies
-				$.each(unmatched, (index2, element2) => {
-					if (element2.matched) return;
-					var c2 = element2.candidate;
+				// Loop through all other unmatched rows
+				$.each(unmatched, (index2, c2) => {
+					if (c2.__matched) return;
 					
 					// If the ID matches, add it
 					if (c2.id == c1.id) {
-						element2.matched = true;
-						pending.push(element2);
+						c2.__matched = true;
+						pending.push(c2);
 					} else {
+						
+						var score = calcScore(c1, c2);
+						if (score.nameScore >= 0.95 && score.totalScore >= 0.90) {
 							
-						// Calculate name similarity
-						var shortName1 = c1._first_name + ' ' + c1._last_name;
-						var shortName2 = c2._first_name + ' ' + c2._last_name;
-						var jw = jaroWinkler(c1.name, c2.name);
-						var jwShort = jaroWinkler(shortName1, shortName2);
-						
-						// Check party similarity
-						var partyWeight = c1._party_group == c2._party_group ? 1 : c1._party_group == null || c2._party_group == null ? 0.95 : 0.90;
-						
-						// Check location similarity
-						var countryWeight = c1._country == c2._country ? 1 : 0.90;
-						
-						// Calculate overall score
-						var score = Math.max(jw, jwShort) * partyWeight * countryWeight;
-						if (score >= 0.93) {
-								
 							// Add this candidacy
-						/*	window.console.log('findDuplicates', round(jw, 2), round(jwShort, 2), partyWeight, countryWeight, round(score, 2));
-							window.console.log('findDuplicates              ', c1.id, c1.name, c1._year, c1._election_type, c1._party_group, c1._country);
-							window.console.log('findDuplicates              ', c2.id, c2.name, c2._year, c2._election_type, c2._party_group, c2._country); */
-							element2.score = score;
-							element2.matched = true;
-							pending.push(element2);
+							//c2.__score = score;
+							c2.__matched = true;
+							pending.push(c2);
 							found = true;
 						
 						}
@@ -877,23 +908,7 @@ function findDuplicates() {
 			
 			// Add to the table
 			if (found) {
-				groups++;
-				matches.sort((a, b) => a.candidate.id > b.candidate.id || (a.candidate.id == b.candidate.id && a.candidate.election_date > b.candidate.election_date));
-				var rowGroup = $('<tbody></tbody>').appendTo(table);
-				$.each(matches, (index, match) => 
-					$('<tr></tr>')
-						.addCell(groups)
-						.addCell(match.candidate.id)
-						.addCell('')
-						.addCell(match.candidate.name)
-						.addCell(match.candidate.election_date)
-						.addCell(match.candidate._election_type)
-						.addCell(match.candidate.post_label)
-						.addCell(match.candidate.party_name)
-						.addCell(match.candidate.party_id) // *****
-						.addCell(match.score ? match.score.toFixed(2) : '') // *****
-						.appendTo(rowGroup));
-				table.show();
+				groups.push(matches);
 			}
 			
 		}
@@ -902,7 +917,70 @@ function findDuplicates() {
 		if (index < unmatched.length) {
 			window.setTimeout(checkData, 10);
 		} else {
-			$('#sjo-api-status-dupes').text('Search complete; ' + groups + ' groups found');
+			$('#sjo-api-status-dupes').text('Search complete; ' + groups.length + ' groups found');
+			writeDupesTable();
+		}
+		
+	}
+	
+	function calcScore(c1, c2) {
+		//window.console.log('calcScore', c1, c2);
+		
+		// Calculate name similarity
+		// TODO: account for name variations
+		var shortName1 = c1._first_name + ' ' + c1._last_name;
+		var shortName2 = c2._first_name + ' ' + c2._last_name;
+		var nameScore = Math.max(jaroWinkler(c1.name, c2.name), jaroWinkler(c1.name, shortName2), jaroWinkler(shortName1, c2.name));
+		
+		// Check party similarity
+		var partyWeight = c1._party_group == c2._party_group ? 1 : c1._party_group == null || c2._party_group == null ? 0.95 : 0.90;
+		
+		// Check location similarity
+		var countryWeight = c1._country == c2._country ? 1 : 0.90;
+		
+		// Calculate overall score
+		var totalScore = nameScore * partyWeight * countryWeight;
+		
+		return {'totalScore': totalScore, 'nameScore': nameScore};
+		
+	}
+	
+	function writeDupesTable() {
+		
+		// Write all groups to table
+		if (groups.length > 0) {
+			
+			$.each(groups, (groupIndex, matches) => {
+				
+				// Sort the group by ID and date
+				matches.sort((a, b) => a.id > b.id || (a.id == b.id && a.election_date > b.election_date));
+				
+				$.each(matches, (matchIndex, match) => {
+					
+					// Recalculate the score against all the other matches
+					var bestScore = matches.reduce((acc, other) => other.id == match.id ? acc : Math.max(acc, calcScore(match, other).totalScore), 0);
+					
+					// Write to the dupes table
+					$('<tr class="sjo-api-dupes-row-' + matchIndex + '"></tr>')
+						.addCell(groupIndex)
+						.addCell(match.id)
+						.addCell('')
+						.addCell(match.name)
+						.addCell(match.election_date)
+						.addCell(match._election_type)
+						.addCell(match.post_label)
+						.addCell(match.party_name)
+						.addCell(match.party_id) // *****
+						//.addCell(match.score ? match.score.toFixed(2) : '')
+						.addCell(bestScore.toFixed(2)) // *****
+						.appendTo(table);
+					
+				});
+				
+			});
+			
+			table.show();
+			
 		}
 		
 	}
