@@ -1,11 +1,12 @@
-﻿// ==UserScript==
+// ==UserScript==
 // @name        Democracy Club tweaks
 // @namespace   sjorford@gmail.com
 // @include     https://candidates.democracyclub.org.uk/*
 // @version     2017-03-19
 // @grant       none
-// @require     https://gist.githubusercontent.com/arantius/3123124/raw/grant-none-shim.js
 // @require     https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.12.0/moment.min.js
+// @require     https://raw.githubusercontent.com/sjorford/js/master/sjo-jq.js
+// @require     https://raw.githubusercontent.com/sjorford/fun-with-elections/master/dc-lib.js
 // ==/UserScript==
 
 // Parameters
@@ -94,17 +95,18 @@ $(`<style id="sjo-style-tweaks">
 	.person__actions__action.sjo-post-candidates {background-color: #ff9;}
 	.sjo-post-candidates p {margin-bottom: 0.25em !important;}
 	.sjo-is-current {font-weight: bold;}
+	.sjo-search-exact {border: 2px solid gold; padding: 5px; margin-left: -7px; border-radius: 4px; background-color: #fff3b1;}
 </style>`).appendTo('head');
 
 $(function() {
 	
-	var url = window.location.href;
+	var url = location.href;
 	
 	// Add API link to header
 	$('<li class="nav-links__item"><a href="/help/api">API</a></li>').appendTo('.header__nav .nav-links');
 	
 	// Clean up pasted names
-	$('body').on('paste', 'input', event => window.setTimeout(() => cleanInputValue(event.target), 0));
+	$('body').on('paste', 'input', event => setTimeout(() => cleanInputValue(event.target), 0));
 	
 	// Fix label "for" atttributes
 	$('label').each((index, element) => {
@@ -174,7 +176,29 @@ $(function() {
 	if (container.html().trim() === '') container.remove();
 	if (hero.html().trim() === '') hero.remove();
 	
+	// Highlight search results
+	if (url.indexOf('https://candidates.democracyclub.org.uk/search?') === 0) {
+		highlightSearchResults();
+	}
+	
 });
+
+function highlightSearchResults() {
+	
+	var searchName = $('form.search input[name="q"]').val().trim();
+	var regex = new RegExp('(^|\\s)' + searchName
+			.replace(/[\.\*\?\[\]\(\)\|\^\$\\\/]/g, '\\$&')
+			.replace(/\s+/, '(\\s+|\\s+.*\\s+)') + '$');
+	window.console.log('highlightSearchResults', regex);
+	
+	$('.candidates-list__person').each((index, element) => {
+		var item = $(element);
+		if (item.find('.candidate-name').text().match(regex)) {
+			item.addClass('sjo-search-exact');
+		}
+	});
+	
+}
 
 // ================================================================
 // Format a candidate page
@@ -257,7 +281,7 @@ function formatCandidatePage() {
 	
 	// Add upload link if not present
 	if ($('.person__actions__photo').length === 0) {
-		var candidateID = window.location.href.match(/\/person\/(\d+)/)[1];
+		var candidateID = location.href.match(/\/person\/(\d+)/)[1];
 		var candidateName = $('.person__hero h1').text();
 		$(`<div class="person__actions__action person__actions__photo">
 			<h2>Trying to upload a photo?</h2>
@@ -269,11 +293,13 @@ function formatCandidatePage() {
 
 function formatVersionChanges(dd) {
 	
+	// Create table for version changes
+	var versionTable = $('<table class="sjo-version"></table>').prependTo(dd);
+	
 	// Reformat version changes as a table
 	// TODO: sort fields into input order
 	// TODO: indicate recent versions
 	var diffsPara = dd.find('.version-diff');
-	var versionTable = $('<table class="sjo-version"></table>').prependTo(dd);
 	diffsPara.find('span').each(function(index, element) {
 		var span = $(element);
 		var spanText = span.text().replace(/\n|\r/g, ' ');
@@ -282,52 +308,49 @@ function formatVersionChanges(dd) {
 		if (span.hasClass('version-op-add')) {
 			var matchAdd = spanText.match(/^Added: (.+) => ["\[\{]([\s\S]*)["\]\}]$/);
 			if (matchAdd) {
-				if (matchAdd[2].length > 0) {
-					$('<tr></tr>')
-						.addHeader(matchAdd[1])
-						.addCell('', 'sjo-version-op')
-						.addCell('')
-						.addCell('+', 'sjo-version-add sjo-version-op')
-						.addCell(cleanData(matchAdd[2]), 'sjo-version-add')
-						.appendTo(versionTable);
-				}
-				span.next('br').remove();
-				span.remove();
+				addChangeRow(matchAdd[1], '', matchAdd[2], span);
 			}
 			
 		// Data replaced
 		} else if (span.hasClass('version-op-replace')) {
 			var matchReplace = spanText.match(/^At (.+) replaced "(.*)" with "(.*)"$/);
 			if (matchReplace) {
-				$('<tr></tr>')
-					.addHeader(matchReplace[1] + '</th>')
-					.addCell('-', 'sjo-version-delete sjo-version-op')
-					.addCell(cleanData(matchReplace[2]), 'sjo-version-delete')
-					.addCell('+', 'sjo-version-add sjo-version-op')
-					.addCell(cleanData(matchReplace[3]), 'sjo-version-add')
-					.appendTo(versionTable);
-				span.next('br').remove();
-				span.remove();
+				addChangeRow(matchReplace[1], matchReplace[2], matchReplace[3], span);
 			}
 			
 		// Data removed
 		} else if (span.hasClass('version-op-remove')) {
 			var matchDelete = spanText.match(/^Removed: (.+) \(previously it was ["\[\{](.*)["\]\}]\)$/); // TODO: null
 			if (matchDelete) {
-				$('<tr></tr>')
-					.addHeader(matchDelete[1])
-					.addCell('-', 'sjo-version-delete sjo-version-op')
-					.addCell(cleanData(matchDelete[2]), 'sjo-version-delete')
-					.addCell('', 'sjo-version-op')
-					.addCell('')
-					.appendTo(versionTable);
-				span.next('br').remove();
-				span.remove();
+				addChangeRow(matchDelete[1], matchDelete[2], '', span);
 			}
 			
 		}
 		
 	});
+	
+	// TODO: apply widths using colgroups
+	function addChangeRow(fieldName, dataFrom, dataTo, original) {
+		if (dataFrom.length > 0 || dataTo.length > 0) {
+			var row = $('<tr></tr>').addHeader(fieldName.replace(/\//g, ' \u203A ')).appendTo(versionTable);
+			
+			if (dataFrom.length > 0) {
+				row.addCell('-', 'sjo-version-delete sjo-version-op').addCell(cleanData(dataFrom), 'sjo-version-delete');
+			} else {
+				row.addCell('', 'sjo-version-op').addCell('');
+			}
+			
+			if (dataTo.length > 0) {
+				row.addCell('-', 'sjo-version-add sjo-version-op').addCell(cleanData(dataTo), 'sjo-version-add');
+			} else {
+				row.addCell('', 'sjo-version-op').addCell('');
+			}
+			
+			
+		}
+		original.next('br').remove();
+		original.remove();
+	}
 	
 	function cleanData(data) {
 		return data.replace(/\\"/g, '"');
@@ -385,30 +408,19 @@ function formatAddCandidateButtons() {
 			$('<div role="list"></div>').appendTo('.sjo-addperson-listcolumns').append(listitems).before(`<h3>${country}</h3>`);
 		}
 	});
-	if (localList.find('p').length == 0) localList.add(localHeading).hide();
+	if (localList.find('p').length === 0) localList.add(localHeading).hide();
 	
 	// Store button ID when clicked
-	$('body').on('click', '.sjo-addperson-listitem', event => GM_setValue('addperson-button', $(event.target).closest('.sjo-addperson-listitem').attr('id')));
+	// TODO: use native DOM Storage API for this
+	$('body').on('click', '.sjo-addperson-listitem', event => localStorage.setItem('sjo-addperson-button', $(event.target).closest('.sjo-addperson-listitem').attr('id')));
 	
 	// Retrieve button ID on load
-	var lastButtonID = GM_getValue('addperson-button');
-	window.console.log(lastButtonID);
+	var lastButtonID = localStorage.getItem('sjo-addperson-button');
+	console.log(lastButtonID);
 	if (lastButtonID) $(`[id="${lastButtonID}"]`).addClass('sjo-addperson-latest');
 	
 	//$('.content .container').append('<img height=100 width=100 src="file:///C:/Users/Stuart/Desktop/wales.svg">');
 	
-}
-
-function getCountryForElection(electionID) {
-	var country = 'EN';
-	if (electionID.match(/^sp\.|^(local|parl)\.[^.]*(aberdeen|airdrie|angus|argyll|ayrshire|banff|berwick|caithness|carrick|clackmannan|coatbridge|cumbernauld|dumfries|dundee|du[mn]barton|east-kilbride|edinburgh|eilean-siar|eileanan-an-iar|falkirk|fife|glasgow|glenrothes|gordon|hamilton|highland|inverclyde|inverness|kilmarnock|kirkcaldy|lanark|livingston|lothian|moray|motherwell|orkney|perth|renfrew|scottish-borders|shetland|skye|stirling)/)) {
-		country = 'SC';
-	} else if (electionID.match(/^naw\.|^(local|parl|pcc)\.[^.]*(aberavon|anglesey|arfon|brecon|bridgend|caerphilly|cardiff|carmarthen|ceredigion|clwyd|conwy|cynon|deeside|delyn|denbigh|flint|glamorgan|gower|gwent|gwynedd|islwyn|llanelli|meirionnydd|merthyr|monmouth|montgomery|neath|newport|ogmore|pembroke|pontypridd|powys|rhondda|swansea|torfaen|wales|wrexham|ynys-m)/)) {
-		country = 'WA';
-	} else if (electionID.match(/^nia\.|^(local|parl)\.[^.]*(antrim|armagh|belfast|causeway|derry|(north|south)-down([^s]|$)|fermanagh|foyle|lagan-valley|lisburn|newry|strangford|tyrone|ulster|upper-bann)/)) {
-		country = 'NI';
-	}
-	return country;
 }
 
 // ================================================================
@@ -454,12 +466,12 @@ function formatEditForm() {
 	var refreshTimer;
 	$('body').on('change', '#add_more_elections', event => {
 		var slug = event.target.value;
-		window.console.log(slug);
+		console.log(slug);
 		if (!refreshTimer) {
-			refreshTimer = window.setInterval(() => {
-				window.console.log(slug);
+			refreshTimer = setInterval(() => {
+				console.log(slug);
 				if ($(`[id="id_standing_${slug}"]`).length > 0) {
-					window.clearInterval(refreshTimer);
+					clearInterval(refreshTimer);
 					refreshTimer = null;
 					$.each(electionFields, (key, value) => formatField(key, value, slug));
 				}
@@ -470,7 +482,7 @@ function formatEditForm() {
 	// Format an input field
 	function formatField(id, labelText, slug) {
 		if (slug) id = id.replace('{slug}', slug);
-		window.console.log('formatField', id, labelText, slug);
+		console.log('formatField', id, labelText, slug);
 		
 		var input = $(`[id="${id}"]`);
 		var formItem = input.closest('.form-item');
@@ -524,7 +536,7 @@ function formatEditForm() {
 	
 	function renderPostCandidates(electionID, postID, postName, data) {
 		
-		window.console.log('renderPostCandidates', electionID, postID, postName, data);
+		console.log('renderPostCandidates', electionID, postID, postName, data);
 		var block = $('#sjo-post-candidates-' + electionID.replace(/\./g, '_'));
 		if (block.length === 0) {
 			block = $('<div class="person__actions__action sjo-post-candidates" id="sjo-post-candidates-' + electionID.replace(/\./g, '_') + '"></div>').appendTo('.person__actions');
@@ -535,7 +547,7 @@ function formatEditForm() {
 		if (candidates.length === 0) {
 			block.append('<p>There are currently no candidates for this post</p>');
 		} else {
-			var match = window.location.href.match(/\/person\/(\d+)\//);
+			var match = location.href.match(/\/person\/(\d+)\//);
 			var currentID = match ? match[1] : '';
 			block.append(candidates.map(candidate => 
 				`<p>` + (candidate.person.id == currentID ? `<span class="sjo-is-current"> ${candidate.person.name}</span>` : `<a href="/person/${candidate.person.id}">${candidate.person.name}</a>`) + 
@@ -602,7 +614,7 @@ function formatBulkAddPage() {
 	}
 	
 	function renderBulkAddData(input, data) {
-		window.console.log(data);
+		console.log(data);
 		input.closest('li')
 			.append('<ul class="sjo-bulkadd-data">' + data.memberships.map(member => 
 				`<li>${member.election.name} (${trimPost(member.post.label)}) - ${member.on_behalf_of.name}</li>`).join('') + '</ul>');
@@ -637,7 +649,7 @@ function formatResultsPage() {
 	
 	// Check total
 	$('body').on('input', '.sjo-results-num', function(event) {
-		window.console.log(event.target);
+		console.log(event.target);
 		
 		// Get entered total
 		var totalCell = $('#id_num_turnout_reported');
@@ -657,7 +669,7 @@ function formatResultsPage() {
 			totalCell.removeClass('sjo-total-error');
 		} else {
 			totalCell.addClass('sjo-total-error');
-			window.console.log('sum of votes', sumTotal, 'difference', sumTotal - enteredTotal);
+			console.log('sum of votes', sumTotal, 'difference', sumTotal - enteredTotal);
 		}
 		
 	});
@@ -711,7 +723,7 @@ function formatRecentChanges() {
 function formatStatistics() {
 	
 	$('.statistics-elections').each(function(index, element) {
-		window.console.log(element);
+		console.log(element);
 		
 		var table = $('<table class="sjo-stats"></table>')
 			.appendTo(element)
@@ -723,23 +735,23 @@ function formatStatistics() {
 		$('div', element).each(function(index, element) {
 			
 			var div = $(element);
-			//window.console.log(div);
+			//console.log(div);
 			
 			var matchId = element.id.match(/^statistics-election-((parl|sp|naw|nia|gla|mayor|pcc|local)(-(a|r|c))?(-([-a-z]{2,}))?)-(\d{4}-\d{2}-\d{2})$/);
-			//window.console.log(element.id, matchId);
+			//console.log(element.id, matchId);
 			
 			var headerText = div.find('h4').text();
 			var matchHeader = headerText.match(/^Statistics for the (\d{4} )?(.+?)( (local|Mayoral))?( [Ee]lection|by-election: (.*) (ward|constituency))?( \((.+)\))?$/, '');
-			//window.console.log(headerText, matchHeader);
+			//console.log(headerText, matchHeader);
 			
 			if (matchId && matchHeader) {
-				//window.console.log(matchId, matchHeader);
+				//console.log(matchId, matchHeader);
 				
 				var key = matchId[2] + (matchId[3] ? '.' + matchId[4] : '') + (matchId[5] ? '.' + matchId[6] : '');
 				var type = matchId[2];
 				var date = matchId[7];
 				var area = matchHeader[2] + (matchHeader[8] ? matchHeader[8] : '');
-				//window.console.log(key, type, date, area);
+				//console.log(key, type, date, area);
 				
 				var bullets = div.find('li');
 				var candidates = bullets.eq(0).text().replace(/^Total candidates: /, '');
@@ -823,61 +835,3 @@ function getTableHeadings(element) {
 	});
 	return headings;
 }
-
-// ================================================================
-// jQuery plugins
-// ================================================================
-
-// Add a new cell to a table row
-(function($) {
-	
-	// Add cell with text content
-	$.fn.addCell = function(text, className, id) {
-		return _addCell(this, false, text, className, id, false);
-	};
-	
-	// Add cell with HTML content
-	$.fn.addCellHTML = function(html, className, id) {
-		return _addCell(this, true, html, className, id, false);
-	};
-	
-	// Add header cell with text content
-	$.fn.addHeader = function(text, className, id) {
-		return _addCell(this, false, text, className, id, true);
-	};
-	
-	// Add header cell with HTML content
-	$.fn.addHeaderHTML = function(html, className, id) {
-		return _addCell(this, true, html, className, id, true);
-	};
-	
-	function _addCell(obj, isHTML, content, className, id, header) {
-		for (var i = 0; i < obj.length; i++) {
-			var row = obj[i];
-			if (row.tagName == 'TR') {
-				var cell = header ? $('<th></th>') : $('<td></td>');
-				if (content !== null && content !== undefined) {
-					if (isHTML) cell.html(content); 
-					else cell.text(content);
-				}
-				if (className) cell.addClass(className);
-				if (id) cell.attr('id', id);
-				cell.appendTo(row);
-			}
-		}
-		return obj;
-	}
-	
-})(jQuery);
-
-// Select range
-(function($) {
-	$.fn.selectRange = function() {
-		var range = document.createRange();
-		range.selectNodeContents(this.get(0));
-		var selection = window.getSelection();
-		selection.removeAllRanges();
-		selection.addRange(range);
-		return this;
-	};
-})(jQuery);
