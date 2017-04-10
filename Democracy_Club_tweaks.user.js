@@ -2,7 +2,7 @@
 // @name        Democracy Club tweaks
 // @namespace   sjorford@gmail.com
 // @include     https://candidates.democracyclub.org.uk/*
-// @version     2017-03-19
+// @version     2017-04-10
 // @grant       none
 // @require     https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.12.0/moment.min.js
 // @require     https://raw.githubusercontent.com/sjorford/js/master/sjo-jq.js
@@ -11,14 +11,15 @@
 
 // Parameters
 var rootUrl = 'https://candidates.democracyclub.org.uk/';
-var maxUrlLength = 50;
+var maxUrlLength = 40;
+var knownPartiesOnly = true;
 
 // Styles
 $(`<style id="sjo-style-tweaks">
 	.sjo-stats {font-size: 9pt;}
 	.sjo-stats td, .sjo-stats th, .sjo-lesspadding td, .sjo-lesspadding th {padding: 4px;}
 	.sjo-nowrap {white-space: nowrap;}
-	.sjo-mychanges {background-color: #ffeb99 !important;}
+	.sjo-mychanges, .sjo-mysuggestion {background-color: #ffeb99 !important;}
 	.sjo-number {text-align: right;}
 	.counts_table td, .counts_table th {padding: 4px !important;}
 	.select2-results {max-height: 500px !important;}
@@ -68,7 +69,7 @@ $(`<style id="sjo-style-tweaks">
 	.sjo-addperson-latest .sjo-addperson-button {background-color: #fc0 !important;}
 	.sjo-addperson-latest .sjo-addperson-text {font-weight: bold;}
 	.sjo-posts-listcolumns {column-width: 250px; -moz-column-width: 250px;}
-	.sjo-recent-unknown, .sjo-recent-unknown.sjo-mychanges {background-color: #daa !important;}
+	xxx.sjo-recent-unknown, xxx.sjo-recent-unknown.sjo-mychanges {background-color: #daa !important;}
 	.header__nav .large-4 {width: 33.33333% !important;}
 	.header__nav .large-6 {width: 50% !important;}
 	.header__nav .large-8 {width: 66.66667%; !important;}
@@ -87,27 +88,25 @@ $(`<style id="sjo-style-tweaks">
 	.sjo-bulkadd-listitem input {margin-bottom: 0 !important}
 	.sjo-bulkadd-data {font-size: 0.75rem; xxxcolor: #aaa; margin-bottom: 0rem !important; list-style-type: none;}
 	.sjo-bulkadd-link {font-weight: bold;}
-	.no-candidates {display: inline-block; width: 88%; margin-left: 0.5rem;}
-	.sjo-ohno {display: inline-block; background-image: url("http://i256.photobucket.com/albums/hh187/sjorford/oh%20no.png"); background-repeat: no-repeat; height: 80px; width: 80px;}
-	.select2-result-label {font-size: 0.75rem; padding: 0 2px !important;}
+	xxx.no-candidates {display: inline-block; width: 88%; margin-left: 0.5rem;}
+	.select2-result-label {font-size: 0.8rem;}
 	.person__actions__action {padding: 1em; margin-bottom: 1em;}
 	.person__actions__action h2 {margin-top: 0 !important;}
 	.person__actions__action.sjo-post-candidates {background-color: #ff9;}
 	.sjo-post-candidates p {margin-bottom: 0.25em !important;}
 	.sjo-is-current {font-weight: bold;}
 	.sjo-search-exact {border: 2px solid gold; padding: 5px; margin-left: -7px; border-radius: 4px; background-color: #fff3b1;}
+	xxx.sjo-search-link {font-weight: bold; font-size: 0.75rem; margin-bottom: 0.5em; display: inline-block;}
 </style>`).appendTo('head');
 
 $(function() {
 	
 	var url = location.href;
 	
-	// Add API link to header
-	$('<li class="nav-links__item"><a href="/help/api">API</a></li>').appendTo('.header__nav .nav-links');
-	
 	// Clean up pasted names
 	$('body').on('paste', 'input', event => setTimeout(() => cleanInputValue(event.target), 0));
 	
+	/*
 	// Fix label "for" atttributes
 	$('label').each((index, element) => {
 		var label = $(element);
@@ -116,14 +115,12 @@ $(function() {
 			label.attr('for', input.attr('id'));
 		}
 	});
+	*/
 	
 	// Fix broken EC links
 	$('.party__primary a[href^="http://search.electoralcommission.org.uk/"]').each(function(index, element) {
 		element.href = element.href.replace(/electoral-commission:%20/, '');
 	});
-	
-	// Add cartoon
-	$('<div class="sjo-ohno"></div>').insertBefore('.no-candidates');
 	
 	// Add candidate - list of elections
 	if (url.indexOf(rootUrl + 'person/create/select_election?') === 0) {
@@ -148,8 +145,12 @@ $(function() {
 	}
 	
 	// Get extra data on bulk adding page
-	if (url.indexOf(rootUrl + 'bulk_adding/') === 0 && url.indexOf('/review/') >= 0) {
-		formatBulkAddPage();
+	if (url.indexOf(rootUrl + 'bulk_adding/') === 0) {
+		if (url.indexOf('/review/') >= 0) {
+			formatBulkAddReviewPage();
+		} else {
+			formatBulkAddPage();
+		}
 	}
 	
 	// Compact main statistics page
@@ -160,6 +161,15 @@ $(function() {
 	// Compact recent changes pages
 	if (url.indexOf(rootUrl + 'recent-changes') === 0) {
 		formatRecentChanges();
+	}
+	
+	// Format page lock suggestions
+	if (url.indexOf(rootUrl + 'moderation/suggest-lock') === 0) {
+		formatLockSuggestions();
+	}
+	
+	function formatLockSuggestions() {
+		$('.container li').filter((index, element) => element.innerText.indexOf('User sjorford suggested locking this') >= 0).addClass('sjo-mysuggestion');
 	}
 	
 	// Format results pages
@@ -186,10 +196,9 @@ $(function() {
 function highlightSearchResults() {
 	
 	var searchName = $('form.search input[name="q"]').val().trim();
-	var regex = new RegExp('(^|\\s)' + searchName
-			.replace(/[\.\*\?\[\]\(\)\|\^\$\\\/]/g, '\\$&')
-			.replace(/\s+/, '(\\s+|\\s+.*\\s+)') + '$');
-	window.console.log('highlightSearchResults', regex);
+	var regexString = '(^|\\s)' + searchName.replace(/[\.\*\?\[\]\(\)\|\^\$\\\/]/g, '\\$&').replace(/\s+/, '(\\s+|\\s+.*\\s+)') + '$';
+	console.log('highlightSearchResults', regexString);
+	var regex = new RegExp(regexString, 'i');
 	
 	$('.candidates-list__person').each((index, element) => {
 		var item = $(element);
@@ -419,8 +428,6 @@ function formatAddCandidateButtons() {
 	console.log(lastButtonID);
 	if (lastButtonID) $(`[id="${lastButtonID}"]`).addClass('sjo-addperson-latest');
 	
-	//$('.content .container').append('<img height=100 width=100 src="file:///C:/Users/Stuart/Desktop/wales.svg">');
-	
 }
 
 // ================================================================
@@ -464,20 +471,31 @@ function formatEditForm() {
 	
 	// Detect new election
 	var refreshTimer;
-	$('body').on('change', '#add_more_elections', event => {
+	$('body').on('change', '#add_more_elections', electionChanged);
+	
+	function electionChanged(event) {
 		var slug = event.target.value;
-		console.log(slug);
+		console.log('electionChanged', slug);
+		
+		// Update saved election
+		localStorage.setItem('sjo-addperson-button', 'sjo-addperson-listitem-' + slug.replace(/\./g, '_'));
+		
+		// Wait for form to load
 		if (!refreshTimer) {
-			refreshTimer = setInterval(() => {
-				console.log(slug);
-				if ($(`[id="id_standing_${slug}"]`).length > 0) {
-					clearInterval(refreshTimer);
-					refreshTimer = null;
-					$.each(electionFields, (key, value) => formatField(key, value, slug));
-				}
-			}, 0);
+			refreshTimer = setInterval(checkFieldsLoaded, 0);
 		}
-	});
+		
+		// Check if fields have loaded
+		function checkFieldsLoaded() {
+			console.log('checkFieldsLoaded', slug);
+			if ($(`[id="id_standing_${slug}"]`).length > 0) {
+				clearInterval(refreshTimer);
+				refreshTimer = null;
+				$.each(electionFields, (key, value) => formatField(key, value, slug));
+			}
+		}
+		
+	}
 	
 	// Format an input field
 	function formatField(id, labelText, slug) {
@@ -503,7 +521,7 @@ function formatEditForm() {
 			prefix.unwrap().addClass('sjo-prefix');
 			input.unwrap().unwrap();
 		}
-	
+		
 		// Trim party selection
 		if (input.is('.party-select')) {
 			var html = input.html();
@@ -591,20 +609,50 @@ function formatEditForm() {
 }
 
 // ================================================================
-// Bulk adding review page
+// Bulk adding pages
 // ================================================================
 
 function formatBulkAddPage() {
 	
 	// TODO: allow party dropdowns to be deselected
 	
-	$('form li input[type="radio"]').each(lookupBulkAddData);
+	// Trim party selection
+	// TODO: make this a function
+	// TODO: allow deleted parties to be re-added
+	var partySelects = $('.party-select');
+	var html = partySelects.eq(0).html();
+	html = html.replace(/\((\d+) candidates\)/g, '[$1]');
+	if (knownPartiesOnly) html = html.replace(/<option value="\d+">[^<\[\]]+<\/option>/g, '');
+	partySelects.html(html);
+	
+	// Add a checkbox for reversed names
+	// TODO: add this to other edit pages
+	$('<input type="checkbox" id="sjo-reverse" value="reverse" checked><label for="sjo-reverse">Surname first</label>').insertBefore('#bulk_add_form').wrapAll('<div></div>');
+	
+}
+
+function formatBulkAddReviewPage() {
+	
+	$('form h2').each(addSearchLink);
+	
+	// TODO: this is now broken due to website changes
+	$('form input[type="radio"]').each(lookupBulkAddData);
+	
+	function addSearchLink(index, element) {
+		var nameMatch = element.innerText.trim().match(/^Candidate:\s+(\S+)\s+((.+)\s+)?(\S+)$/);
+		console.log('addSearchLink', index, element, nameMatch);
+		if (nameMatch && nameMatch[3]) {
+			var fullName = nameMatch[1] + ' ' + nameMatch[3] + ' ' + nameMatch[4];
+			var shortName = nameMatch[1] + ' ' + nameMatch[4];
+			element.innerHTML = 'Candidate: <a href="https://candidates.democracyclub.org.uk/search?q=' + encodeURIComponent(shortName) + '" target="_blank">' + fullName + '</a>';
+		}
+	}
 	
 	function lookupBulkAddData(index, element) {
 		
 		// Get ID of matching person
 		var input = $(element);
-		input.closest('li').addClass('sjo-bulkadd-listitem').find('a').addClass('sjo-bulkadd-link');
+		input.closest('label').addClass('sjo-bulkadd-listitem').find('a').addClass('sjo-bulkadd-link');
 		var personID = input.val();
 		if (personID == '_new') return;
 		
@@ -614,7 +662,6 @@ function formatBulkAddPage() {
 	}
 	
 	function renderBulkAddData(input, data) {
-		console.log(data);
 		input.closest('li')
 			.append('<ul class="sjo-bulkadd-data">' + data.memberships.map(member => 
 				`<li>${member.election.name} (${trimPost(member.post.label)}) - ${member.on_behalf_of.name}</li>`).join('') + '</ul>');
@@ -703,7 +750,7 @@ function formatRecentChanges() {
 		// Stop columns wrapping
 		dateCell.add(cells.eq(headings['Action'])).addClass('sjo-nowrap');
 		
-		// Make sources into links
+		// Add links
 		var sourceCell = cells.eq(headings['Information source']);
 		sourceCell.html(formatLinks(sourceCell.html(), maxUrlLength));
 		
@@ -809,14 +856,33 @@ function formatStatistics() {
 // ================================================================
 
 // Trim an inputted value and fix upper case names
-// TODO: fix entries like "JOHN SMITH"
+// TODO: fix entries like "JOHN SMITH"?
 function cleanInputValue(input) {
+	console.log('cleanInputValue', input);
+	
+	// Trim all values
 	var value = input.value.trim().replace(/\s+/g, ' ');
+	
+	// Reformat names
 	if (input.name == 'q' || input.id == 'id_name' || input.id.match(/^id_form-\d+-name$/)) {
-		var match = value.match(/^([-'A-Z]{3,})\s+(.*)$/);
-		value = (match ? (match[2] + ' ' + match[1][0] + match[1].slice(1).toLowerCase()) : value);
+		var match = value.match(/^(([-'A-Z]{3,})(\s*,)?)\s+(.*)$/);
+		if (match) {
+			value = match[4] + ' ' + match[2][0] + match[2].slice(1).toLowerCase();
+		} else {
+			match = value.match(/^([^,]+),\s+(.+)$/);
+			if (match) {
+				value = match[2] + ' ' + match[1];
+			} else if ($('#sjo-reverse').is(':checked')) {
+				match = value.match(/^(\S+)\s+(\S.*)$/);
+				if (match) {
+					value = match[2] + ' ' + match[1];
+				}
+			}
+		}
 	}
+	
 	input.value = value;
+	
 }
 
 // Convert a raw URL to a formatted link
