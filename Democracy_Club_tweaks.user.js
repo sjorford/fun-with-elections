@@ -622,7 +622,10 @@ function formatBulkAddPage() {
 	var partySelects = $('.party-select');
 	var html = partySelects.eq(0).html();
 	html = html.replace(/\((\d+) candidates\)/g, '[$1]');
-	if (knownPartiesOnly) html = html.replace(/<option value="\d+">[^<\[\]]+<\/option>/g, '');
+	if (knownPartiesOnly) {
+		html = html.replace(/<optgroup label="(.*?)">[^<]+(<option value="\d+">)[^<]+(<\/option>)[\s\S]*?<\/optgroup>/g, '$2$1$3');
+		html = html.replace(/<option value="\d+">[^<\[\]]+<\/option>/g, '');
+	}
 	partySelects.html(html);
 	
 	// Add a checkbox for reversed names
@@ -652,7 +655,8 @@ function formatBulkAddReviewPage() {
 		
 		// Get ID of matching person
 		var input = $(element);
-		input.closest('label').addClass('sjo-bulkadd-listitem').find('a').addClass('sjo-bulkadd-link');
+		input.closest('label').addClass('sjo-bulkadd-listitem')
+			.find('a').addClass('sjo-bulkadd-link');
 		var personID = input.val();
 		if (personID == '_new') return;
 		
@@ -662,7 +666,7 @@ function formatBulkAddReviewPage() {
 	}
 	
 	function renderBulkAddData(input, data) {
-		input.closest('li')
+		input.closest('label')
 			.append('<ul class="sjo-bulkadd-data">' + data.memberships.map(member => 
 				`<li>${member.election.name} (${trimPost(member.post.label)}) - ${member.on_behalf_of.name}</li>`).join('') + '</ul>');
 	}
