@@ -2,153 +2,205 @@
 // @name        Democracy Club downloads
 // @namespace   sjorford@gmail.com
 // @include     https://candidates.democracyclub.org.uk/help/api
-// @version     2017-03-20
+// @version     2017-04-19
 // @grant       none
 // @require     https://cdnjs.cloudflare.com/ajax/libs/PapaParse/4.1.4/papaparse.min.js
 // @require     https://cdnjs.cloudflare.com/ajax/libs/chosen/1.6.2/chosen.jquery.min.js
 // @require     https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.17.1/moment.min.js
 // @require     https://raw.githubusercontent.com/sjorford/js/master/sjo-jq.js
 // @require     https://raw.githubusercontent.com/sjorford/fun-with-elections/master/dc-lib.js
+// @require     ukprocessed.js
 // ==/UserScript==
 
+// Import stylesheets
+$('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chosen/1.6.2/chosen.css">').appendTo('head');
+
 // Defaults
-var maxTableRows = 100; // TODO: add options for this
+// TODO: add options for this
+var maxTableRows = 100; 
 //maxTableRows = 1000;
 //maxTableRows = 10000;
 //maxTableRows = 100000;
+
+// TODO: make these selectable profiles
+var tableFieldNames;
+//tableFieldNames = ['_first_name', '_gender', '_maleness'];
+//tableFieldNames = ['twitter_username'];
+//tableFieldNames = ['post_label', 'name', 'party_name', 'email'];
+//tableFieldNames = ['id', 'name', 'election', 'election_date', 'post_id', 'post_label', 'party_id', 'party_name'];
+//tableFieldNames = ['id', '_first_name', '_last_name', 'election', 'election_date', 'post_label', 'party_id', 'party_name'];
+//tableFieldNames = ['election_date', 'party_id', 'party_name'];
+//tableFieldNames = ['id', '_short_name', 'election', 'post_label', 'party_name'];
+//tableFieldNames = ['election', '_election', '_byelection'];
+//tableFieldNames = ['_election', '_election_name'];
+
+var defaultFilters = {};
+//defaultFilters = {'_election': ['local.*', 'mayor.*']};
+
+// TODO: this would be cool
+var defaultSort = [];
 
 // Global variables
 var data = null;
 var pageNo = 1, maxPageNo = 1;
 var sortColumn = -1, sortOrder = 1;
 var allCandidatesUrl = 'https://candidates.democracyclub.org.uk/media/candidates-all.csv';
-var url = '';
+var currentUrl = '';
+var currentDate = null;
 var tableColumns = {};
+var dupesActive = true;
+var electionMappings = {'parl': 'Parliament'};
 
 // Styles
 $(`<style>
+	
 	#sjo-api-wrapper {margin: 1rem;}
+	.sjo-api-button-download {margin-right: 1rem;}
+	.sjo-api-button-downloadall {display: block; margin-bottom: 0.5rem;}
 	#sjo-api-select {width: auto;}
-	.sjo-api-disabled {color: #bbb; pointer-events:none;}
-	.sjo-api-paging-current {color: black; pointer-events:none;}
 	#sjo-api-status {font-style: italic; margin-right: 1rem;}
 	#sjo-api-error {font-weight: bold; color: red;}
-	#sjo-api-button-download {margin: 0 1rem;}
 	#sjo-api-button-truncate {margin-right: 1rem;}
+	.sjo-api-disabled {color: #bbb; pointer-events:none;}
+	.sjo-api-paging-current {color: black; pointer-events:none;}
+	
 	#sjo-api-table {margin: 0.5rem 0;}
 	#sjo-api-table th, #sjo-api-table td, #sjo-api-table-dupes th, #sjo-api-table-dupes td {padding: 0.25rem; font-size: 0.75rem !important;}
 	#sjo-api-table th {user-select: none; -moz-user-select: none; text-align: center; background-repeat: no-repeat; background-position: center right;}
 	#sjo-api-table th.sjo-api-th-sort-up {background-image:url(//en.wikipedia.org/w/resources/src/jquery/images/sort_up.png);}
 	#sjo-api-table th.sjo-api-th-sort-down {background-image:url(//en.wikipedia.org/w/resources/src/jquery/images/sort_down.png);}
+	
+	.sjo-api-col				{width: 1.5em;	min-width: 1.5em;}
+	.sjo-api-col-id				{width: 3em;	min-width: 3em;}
+	.sjo-api-col-name			{width: 12em;	min-width: 12em;}
+	.sjo-api-col-election_date	{width: 5em;	min-width: 5em;}
+	.sjo-api-col-_country		{width: 2em;	min-width: 2em;}
+	.sjo-api-col-_election		{width: 12em;	min-width: 12em;}
+	.sjo-api-col-_election_name	{width: 12em;	min-width: 12em;}
+	.sjo-api-col-post_label		{width: 12em;	min-width: 12em;}
+	.sjo-api-col-party_id		{width: 5em;	min-width: 5em;}
+	.sjo-api-col-party_name		{width: 12em;	min-width: 12em;}
+	.sjo-api-col-birth_date		{width: 5em;	min-width: 5em;}
+	.sjo-api-col-birth_date		{width: 5em;	min-width: 5em;}
+	.sjo-api-col-age			{width: 3em;	min-width: 3em;}
+	
 	#sjo-api-row-filter td {font-weight: normal; vertical-align: middle;}
 	#sjo-api-row-filter ul {font-size: 0.75rem !important;}
 	.sjo-api-filter-checkbox {margin: 0 !important;}
 	.sjo-api-filter {min-width: 4rem; max-width: 20rem;}
-	xxx#sjo_api_filter_election_date_chosen {min-width: 8rem; overflow; hidden;}
 	#sjo-api-row-filter .chosen-results .sjo-api-filter-unavailable {color: #ccc;}
+	
+	.sjo-api-row-elected {background-color: #fbf2af !important;}
 	#sjo-api-table td.sjo-api-cell-icon {font-size: 1rem !important; text-align: center;}
 	xxx.sjo-api-cell-party_list_position, xxx.sjo-api-cell-_elected_icon {display: none;}
 	xxx.sjo-api-table-has-party-lists .sjo-api-cell-party_list_position {display: table-cell;}
 	xxx.sjo-api-table-has-results .sjo-api-cell-_elected_icon {display: table-cell;}
-	.sjo-api-row-elected {background-color: #fbf2af !important;}
+	td.sjo-api-invalid {background-color: #ffd4d4 !important;}
+	#sjo-api-table.sjo-api-invalidonly tbody tr {display: none;}
+	#sjo-api-table.sjo-api-invalidonly tbody tr.sjo-api-invalid {display: table-row;}
+	
 	.sjo-api-dupes-first {border-top: 1px black solid;}
 	.sjo-api-dupes-verymuch {background-color: bisque !important;}
-	.sjo-api-invalid {background-color: #fcc !important;}
-	.sjo-api-col-name           {width: 12em; min-width: 12em; max-width: 12em;}
-	.sjo-api-col-_election {width: 12em; min-width: 12em; max-width: 12em;}
-	.sjo-api-col-post_label     {width: 12em; min-width: 12em; max-width: 12em;}
-	.sjo-api-col-party_name     {width: 12em; min-width: 12em; max-width: 12em;}
+	#sjo-api-button-help {margin-top: 0.5rem;}
+	
+	#sjo-api-textarea-raw {min-height: 10em;}
+	
 </style>`).appendTo('head');
-
-// Import stylesheet for dropdowns
-$('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chosen/1.6.2/chosen.css"></style>').appendTo('head');
 
 // Validation functions
 var isValid = {
-	'fb': 		val => val.match(/^https?:\/\/(www\.)?facebook\.com\//),
-	'wp': 		val => val.match(/^https?:\/\/en\.wikipedia\.org\//),
-	'li': 		val => val.match(/^https?:\/\/((uk|www)\.)?linkedin\.com\//),
-	'hp': 		val => !isValid.fb(val) && !isValid.wp(val) && !isValid.li(val),
-	'ppc': 		val => !isValid.fb(val) && !isValid.wp(val) && !isValid.li(val),
-	'gender': 	val => val !== '?',
-	'party': 	(val, candidate) => !((candidate.party_id == 'party:130' && candidate._country != 'SC') || (candidate.party_id == 'party:63' && candidate._country == 'SC')),
+	'name':		(val, cand) => val.match(/^[A-Z]/) && !val.match(/[^-.' a-záâçèéëíòóôöüŷ]/i) && !val.match(/[A-Z]{3,}/) && !val.match(/Mc[^A-Z]/),
+	'email':	(val, cand) => true || !val.match(/\.gov\.uk$/),
+	'fb': 		(val, cand) => val.match(/^https?:\/\/((www|en-gb)\.)?facebook\.com\//),
+	'wp': 		(val, cand) => val.match(/^https?:\/\/en\.wikipedia\.org\//),
+	'li': 		(val, cand) => val.match(/^https?:\/\/((uk|www)\.)?linkedin\.com\//),
+	'hp': 		(val, cand) => !isValid.fb(val) && !isValid.wp(val) && !isValid.li(val),
+	'ppc': 		(val, cand) => !isValid.fb(val) && !isValid.wp(val) && !isValid.li(val),
+	'gender': 	(val, cand) => true || cand._gender !== '?',
+	'party': 	(val, cand) => !((cand.party_id == 'party:130' && cand._country != 'SC') || (cand.party_id == 'party:63' && cand._country == 'SC')),
 };
 
 // Available fields
 var dataFields = {
+	'_row':							{'display': '#',								'sort': '#',																		},
+	'id':							{'display': 'ID',								'sort': '#',																		},
 	
-	'id':							{'display': 'ID',									'sort': '#',			},
-	'name':							{'display': 'Name',			'filter': true,			'link': '/person/@@id@@'},
+	'name':							{'display': 'Name',			'filter': true,		'link': '/person/@@id@@',								'validate': isValid.name,	},
 	'honorific_prefix':				{},
 	'honorific_suffix':				{},
+	'_first_name':					{'display': 'First Name',	'filter': true, 																						},
+	'_middle_names':				{'display': 'Middle Names',	'filter': true, 																						},
+	'_last_name':					{'display': 'Surname',		'filter': true, 																						},
+	'_short_name':					{'display': 'Short Name',	'filter': true, 																						},
+	'_suffix':						{'display': 'Suffix',		'filter': true, 	/* TODO: include honorific_suffix? */												},
+	
 	'gender':						{},
-	'birth_date':					{'display': 'DOB',									},
-	'election':						{'display': 'Election',		'filter': true, 		},
-	'party_id':						{'display': 'ID',									'validate': isValid.party},
-	'party_name':					{'display': 'Party',		'filter': true, 		'validate': isValid.party,		'link': '/election/@@election@@/party/@@party_id@@/'},
-	'post_id':						{'display': 'ID',									},
-	'post_label':					{'display': 'Post',			'filter': true, 		'link': '/election/@@election@@/post/@@post_id@@/'},
-	'mapit_url':					{},
-	'elected':						{							'abbr': '\u2605',		'icon': true,			},
+	'_gender':						{																										'validate': isValid.gender,	},
+	'_gender_icon':					{							'filter': false,	'icon': true,											'validate': isValid.gender,	},
+	'_maleness':					{'display': 'M',								'dp': 2,																			},
 	
-	// Contact fields
-	// TODO: highlight links that appear to be on the wrong domain
-	// TODO: highlight gov.uk email addresses
-	'email':						{'display': 'Email',		'abbr': '@',			},
-	'twitter_username':				{'display': 'Twitter',		'abbr': 'tw',			'link': '//twitter.com/@@twitter_username@@'},
-	'facebook_personal_url':		{'display': 'FB profile',	'abbr': 'fbp',			'link': '@@facebook_personal_url@@',			'validate': isValid.fb},
-	'facebook_page_url':			{'display': 'FB page',		'abbr': 'fbc',			'link': '@@facebook_page_url@@',				'validate': isValid.fb},
-	'homepage_url':					{'display': 'Homepage',		'abbr': 'hp',			'link': '@@homepage_url@@',						'validate': isValid.hp},
-	'wikipedia_url':				{'display': 'Wikipedia',	'abbr': 'wp',			'link': '@@wikipedia_url@@',					'validate': isValid.wp},
-	'linkedin_url':					{'display': 'LinkedIn',		'abbr': 'li',			'link': '@@linkedin_url@@',						'validate': isValid.li},
-	'party_ppc_page_url':			{'display': 'Party page',	'abbr': 'ppc',			'link': '@@party_ppc_page_url@@',				'validate': isValid.ppc},
+	'birth_date':					{'display': 'DOB',																													},
+	'_age_at_election':				{'display': 'Age',																													},
+
+	'election':						{'display': 'Election',		'filter': true, 																						},
+	'_election':					{'display': 'Election',		'filter': true, 																						},
+	'_election_name':				{'display': 'Election',		'filter': true, 																						},
+	'_election_type':				{'display': 'Type', 		'filter': true, 																						},
+	'election_date':				{'display': 'Date',			'filter': true, 																						},
+	'_election_year':				{'display': 'Year',			'filter': true, 	'sort': '#',																		},
+	'election_current':				{},
+	'_byelection':					{'display': 'By',								'abbr': 'by', 																		},
+	'_country':						{'display': 'Co',			'filter': true, 																						},
+	'_region':						{'display': 'Region',		'filter': true, 																						},
+
+	'party_id':						{'display': 'ID',																						'validate': isValid.party,	},
+	'party_name':					{'display': 'Party',		'filter': true, 	'xlink': '/election/@@election@@/party/@@party_id@@/',	'validate': isValid.party,	},
+	'post_id':						{'display': 'ID',																													},
+	'post_label':					{'display': 'Post',			'filter': true, 	'xlink': '/election/@@election@@/post/@@post_id@@/',									},
+	'party_lists_in_use':			{},
+	'party_list_position':			{'display': 'Pos',								'sort': '#',																		},
+	'elected':						{							'abbr': '\u2605',	'icon': true,																		},
+
+	'email':						{'display': 'Email',		'abbr': '@',														'validate': isValid.email,	'group': 'links'},
+	'twitter_username':				{'display': 'Twitter',		'abbr': 'tw',		'link': '//twitter.com/@@twitter_username@@',								'group': 'links'},
+	'facebook_personal_url':		{'display': 'FB profile',	'abbr': 'fbp',		'link': '@@facebook_personal_url@@',			'validate': isValid.fb,		'group': 'links'},
+	'facebook_page_url':			{'display': 'FB page',		'abbr': 'fbc',		'link': '@@facebook_page_url@@',				'validate': isValid.fb,		'group': 'links'},
+	'homepage_url':					{'display': 'Homepage',		'abbr': 'hp',		'link': '@@homepage_url@@',						'validate': isValid.hp,		'group': 'links'},
+	'wikipedia_url':				{'display': 'Wikipedia',	'abbr': 'wp',		'link': '@@wikipedia_url@@',					'validate': isValid.wp,		'group': 'links'},
+	'linkedin_url':					{'display': 'LinkedIn',		'abbr': 'li',		'link': '@@linkedin_url@@',						'validate': isValid.li,		'group': 'links'},
+	'party_ppc_page_url':			{'display': 'Party page',	'abbr': 'ppc',		'link': '@@party_ppc_page_url@@',				'validate': isValid.ppc,	'group': 'links'},
+	'twitter_user_id':				{},
 	
-	// Other fields
-	'image_url':					{'display': 'Image',		'abbr': '\u263A',		'icon': true,			},
+	'image_url':					{'display': 'Image',		'abbr': '\u263A',	'icon': true,																		},
 	'proxy_image_url_template':		{},
 	'image_copyright':				{},
 	'image_uploading_user':			{},
 	'image_uploading_user_notes':	{},
-	'twitter_user_id':				{'display': 'Twitter',								},
-	'election_date':				{'display': 'Date',			'filter': true, 		},
-	'election_current':				{},
-	'party_lists_in_use':			{},
-	'party_list_position':			{'display': 'Pos',									'sort': '#',			},
+	'mapit_url':					{},
 	'gss_code':						{},
 	'parlparse_id':					{},
 	'theyworkforyou_url':			{},
 	'party_ec_id':					{},
 	
-	// Computed fields
-	'_row':							{'display': '#',									'sort': '#',			},
-	'_election':				{'display': 'Election',		'filter': true, 		},
-	'_election_group':				{'display': 'Group',		'filter': true, 		},
-	'_election_year':				{'display': 'Year',			'filter': true, 		'sort': '#',			},
-	'_age_at_election':				{'display': 'Age',									},
-	'_gender_icon':					{							'filter': false,		'icon': true,			'validate': isValid.gender},
-	'_country':						{'display': 'Co',			'filter': true, 		},
-	'_region':						{'display': 'Region',		'filter': true, 		},
-	'_first_name':					{'display': 'First Name',	'filter': true, 		},
-	'_middle_names':				{'display': 'Middle Names',	'filter': true, 		},
-	'_last_name':					{'display': 'Surname',		'filter': true, 		},
-	'_suffix':						{'display': 'Suffix',		'filter': true, 		},
-	
+	'_placeholder':					{},
 };
 
 // Fields to be displayed
 // TODO: add options for these
-var tableFields = [
+tableFieldNames = tableFieldNames || [
 	'id',
 	'name',
 	'election_date',
 	'_election_year',
 	'_country',
-	'_election',
+	//'_election',
+	'_election_type',
+	'_election_name',
 	'post_label',
+	'has:_byelection',
 	'party_list_position',
 	'party_id',
 	'party_name',
-	//'twitter_username',
 	
 	'has:email',
 	'has:twitter_username',
@@ -161,87 +213,65 @@ var tableFields = [
 	
 	'birth_date',
 	'_age_at_election',
+	'_maleness',
 	'_gender_icon',
 	'has:image_url',
 	'has:elected',
+	
 ];
-
-//tableFields = ['_first_name'];
-//tableFields = ['twitter_username'];
-//tableFields = ['post_label', 'name', 'party_name', 'email'];
 
 // Initialize page
 $(function() {
 	console.log('initialize');
 	
-	// Parse field definitions
-	tableColumns = tableFields.map(fieldName => fieldName.indexOf('has:') === 0 ? {'name': fieldName.slice(4), 'has': true} : {'name': fieldName, 'has': false});
-	
 	// Insert wrapper at top of page
 	var wrapper = $('<div id="sjo-api-wrapper"></div>').prependTo('.content');
 	
+	// Add checkboxes for options
+	var optionsWrapper = $('<div></div>').appendTo(wrapper);
+	$('<input type="checkbox" id="sjo-api-option-raw" value="raw" checked><label for="sjo-api-option-raw">Raw output</label>').appendTo(optionsWrapper);
+	$('<input type="checkbox" id="sjo-api-current" value="current" checked><label for="sjo-api-current">Current only</label>').appendTo(optionsWrapper).change(applyCurrentFlag);
+	$('<input type="checkbox" id="sjo-api-autotruncate" value="truncate" checked><label for="sjo-api-autotruncate">Auto truncate</label>').appendTo(optionsWrapper);
+	
+	// Add buttons to extract all candidates
+	var extractAllWrapper = $('<div></div>').appendTo(wrapper);
+	$('<input type="button" class="sjo-api-button-downloadall" value="Extract all candidates">').appendTo(extractAllWrapper).click(startDownload);
+	$('<input type="button" class="sjo-api-button-downloadall" value="Extract 4 May candidates" sjo-api-date="2017-05-04">').appendTo(extractAllWrapper).click(startDownload);
+	$('<input type="button" class="sjo-api-button-downloadall" value="Extract General Election candidates" sjo-api-url="/media/candidates-parl.2017-06-08.csv">').appendTo(extractAllWrapper).click(startDownload);
+	
 	// Add extract dropdown and button
-	var dropdown = $('<select id="sjo-api-select"></select>').appendTo(wrapper)
-		.change(event => dropdownWrapper.toggle(event.target.value == allCandidatesUrl));
-	$('<input type="button" id="sjo-api-button-download" value="Extract">')
-		.appendTo(wrapper).click(startDownload);
-	var dropdownWrapper = $('<span></span>').appendTo(wrapper).hide();
-	$('<input type="checkbox" id="sjo-api-current" value="current" checked><label for="sjo-api-current">Current only</label>')
-		.appendTo(dropdownWrapper).change(applyFilters);
-	$('<input type="checkbox" id="sjo-api-autotruncate" value="truncate" checked><label for="sjo-api-autotruncate">Auto truncate</label>')
-		.appendTo(dropdownWrapper);
+	var dropdown = $('<select id="sjo-api-select"></select>').appendTo(wrapper).wrap('<div></div>');
+	$('<input type="button" class="sjo-api-button-download" value="Extract single election">').insertBefore(dropdown).click(startDownload);
 	
-	// Build list of download options
-	var dropdownHtml = '';
-	$('a[href$=".csv"]').closest('ul').each(function(index, element) {
-		var list = $(element);
-		
-		// Find headings
-		var h3 = list.prevAll('h3').first();
-		var h4 = list.prevUntil(h3, 'h4').first();
-		var h5 = list.prevUntil(h4, 'h5').first();
-		var groupName = 
-			h5.length > 0 ? h5.text() + ' (' + h4.text().substr(-4) + ')' :
-			h4.length > 0 ? h4.text() :
-			h3.text();
-		
-		// Build list of options in this group
-		var groupHtml = list.find('a').toArray().map(element => 
-			'<option value="' + element.href + '">' +
-				element.innerHTML.trim().match(/^Download of the (The )?(.*?)( local election)? candidates$/)[2] + 
-			'</option>').join('');
-		
-		// Add group to dropdown
-		groupHtml = `<optgroup label="${groupName}">${groupHtml}</option>`;
-		dropdownHtml += groupHtml;
-		
-	});
-	
-	// Add all downloads to dropdown
-	dropdown.html(dropdownHtml);
-	
-	// Select default election
-	var lastUrl = localStorage.getItem('sjo-api-url');
-	console.log(lastUrl);
-	if (lastUrl) {
-		dropdown.find(`option[value="${lastUrl}"]`).first().prop({selected: true});
-		dropdown.trigger('change');
-	}
-	
-	// Style dropdown
-	dropdown.chosen();
+	// Build list of dropdown options
+	buildDownloadList(dropdown);
 	
 	// Add other options
 	$('<span id="sjo-api-status"></span>').appendTo(wrapper).wrap('<div></div>').hide();
 	$('<input type="button" id="sjo-api-button-truncate" value="Truncate">').insertAfter('#sjo-api-status').hide().click(truncateDataTable);
 	$('<div id="sjo-api-error"></div>').appendTo(wrapper).hide();
-	$('<input type="button" id="sjo-api-button-dupes" value="Find duplicates">').appendTo(wrapper).hide().click(findDuplicates).after('<span id="sjo-api-status-dupes"></span>');
-	$('<table id="sjo-api-table-dupes"></table>').appendTo(wrapper).hide();
+	$('<div id="sjo-api-invalidonly-wrapper"><input type="checkbox" id="sjo-api-invalidonly" value="invalidonly"><label for="sjo-api-invalidonly">Show only exceptions</label></div>').appendTo(wrapper).hide().click(toggleInvalidOnly);
+	
+	// Add dupe finding buttons
+	var dupesWrapper = $('<div id="sjo-api-dupes-wrapper"></div>').appendTo(wrapper).hide();
+	$('<input type="button" id="sjo-api-button-dupes" value="Find duplicates">').appendTo(dupesWrapper).click(findDuplicates);
+	$('<input type="button" id="sjo-api-button-dupes-pause" value="Pause">').appendTo(dupesWrapper).hide().click(pauseDuplicates);
+	$('<input type="button" id="sjo-api-button-dupes-resume" value="Resume">').appendTo(dupesWrapper).hide().click(resumeDuplicates);
+	$('<span id="sjo-api-status-dupes"></span>').appendTo(dupesWrapper);
+	$('<table id="sjo-api-table-dupes"></table>').appendTo(dupesWrapper).hide();
+	$('<input type="button" id="sjo-api-button-dupes-more" value="More...">').appendTo(dupesWrapper).hide().click(resumeDuplicates);
+	
+	// Parse field definitions
+	tableColumns = tableFieldNames.map(fieldName => fieldName.indexOf('has:') === 0 ? {'name': fieldName.slice(4), 'has': true} : {'name': fieldName, 'has': false});
+	console.log('initialize', tableColumns);
+	console.log('initialize', dataFields);
+	
+	// Create raw output area
+	$('<textarea id="sjo-api-textarea-raw" readonly="readonly"></textarea>').appendTo(wrapper).hide().click((event) => event.target.select());
 	
 	// Create table
 	// TODO: specify fixed widths to stop table from jumping
-	console.log('initialize', tableColumns);
-	var colGroupsHtml = tableColumns.map(column => '<col class="sjo-api-col-' + (column.has ? '__has_' : '') + column.name + '">');
+	var colGroupsHtml = tableColumns.map(column => '<col class="sjo-api-col sjo-api-col-' + (column.has ? '__has_' : '') + column.name + '">');
 	var headerCellsHtml = tableColumns.map(column => 
 		'<th class="sjo-api-cell-' + (column.has ? '__has_' : '') + column.name + '">' + 
 			(dataFields[column.name].display && !column.has ? escapeHtml(dataFields[column.name].display) : '\u00B7') + '</th>');
@@ -253,27 +283,19 @@ $(function() {
 	// Paging buttons
 	table.before('<div class="sjo-api-paging"></div>');
 	table.after('<div class="sjo-api-paging"></div>');
-	$('.sjo-api-paging').append('<a class="sjo-api-paging-prev" role="button">Previous</a> <span class="sjo-api-paging-pages"></span> <a class="sjo-api-paging-all" role="button">All</a> <a class="sjo-api-paging-next" role="button">Next</a>').hide();
+	$('.sjo-api-paging').append('<a class="sjo-api-paging-all" role="button">All</a> <a class="sjo-api-paging-prev" role="button">Previous</a> <span class="sjo-api-paging-pages"></span> <a class="sjo-api-paging-next" role="button">Next</a>').hide();
 	$('.sjo-api-paging-prev').click(event => gotoPage(pageNo - 1));
 	$('.sjo-api-paging-next').click(event => gotoPage(pageNo + 1));
 	$('.sjo-api-paging-all').click(event => gotoPage(Infinity));
 	$('.sjo-api-paging-pages').on('click', 'a', event => gotoPage(parseInt(event.target.innerHTML)));
 
-	function gotoPage(newPageNo) {
-		console.log('gotoPage', newPageNo);
-		if ((newPageNo >= 1 && newPageNo <= maxPageNo) || newPageNo == Infinity) {
-			pageNo = newPageNo;
-			renderTable();
-		}
-	}
-	
 	// Hide rest of page
 	var helpWrapper = $('.help-api').hide();
-	$('<input type="button" id="#sjo-api-button-help" value="Show/hide API help">')
+	$('<input type="button" id="sjo-api-button-help" value="Show/hide API help">')
 		.appendTo(wrapper).click(event => $(helpWrapper).toggle());
 	
-	// Re-render table on filter change
-	$('body').on('change', 'select.sjo-api-filter, .sjo-api-filter-checkbox', function(event) {
+	// Reapply filters on filter change
+	$('body').on('change', 'select.sjo-api-filter', function(event) {
 		applyFilters();
 	});
 	
@@ -289,20 +311,125 @@ $(function() {
 		$(this).selectRange();
 	});
 	
-	// Resize dropdowns on window resize
-	//$(window).resize(event => $('select.sjo-api-filter').trigger('chosen:updated'));
-	
 });
 
-function startDownload() {
+// Build list of download options
+function buildDownloadList(dropdown) {
 	
-	// Get URL from dropdown
-	url = $('#sjo-api-select').val();
-	localStorage.setItem('sjo-api-url', url);
-	console.log('startDownload', url);
+	// Loop through groups of elections
+	var dropdownHtml = '';
+	$('a[href$=".csv"]').closest('ul').each(function(index, element) {
+		var list = $(element);
+		
+		// Get CSV links
+		var links = list.find('a');
+		if (links.length == 1 && links.attr('href') == allCandidatesUrl) return;
+		
+		// Find headings
+		var h3 = list.prevAll('h3').first();
+		var h4 = list.prevUntil(h3, 'h4').first();
+		var h5 = list.prevUntil(h4, 'h5').first();
+		var groupName = 
+			h5.length > 0 ? h5.text() + ' (' + h4.text().substr(-4) + ')' :
+			h4.length > 0 ? h4.text() :
+			h3.text();
+		
+		// Process all links in this group
+		var groupHtml = '';
+		links.each((index, element) => {
+			
+			// Add option to group
+			var downloadName = element.innerHTML.trim().match(/^Download of the (\d{4} )?(The )?(.*?)( local election)? candidates$/)[3];
+			downloadName = downloadName.replace(/^(City|City and County|Council|Mayor) of (the )?|Comhairle nan /, '').trim();
+			downloadName = downloadName.replace(/((City|County|County Borough) )?Council|Combined Authority/, '').trim();
+			downloadName = downloadName.replace(/London Corporation/, 'City of London').trim();
+			groupHtml += `<option value="${element.href}">${downloadName}</option>`;
+			
+			// Add election to mapping table
+			var electionIdMatch = element.href.match(/\/candidates-(parl|pcc|nia|(local|sp|naw|gla|mayor)\.[^\.]+)\./);
+			if (electionIdMatch) {
+				var electionId = electionIdMatch[1];
+				if (!electionMappings[electionId]) {
+					var electionName = downloadName.replace(/ by-election.*$/, '');
+					electionMappings[electionId] = electionName;
+				}
+			}
+			
+		});
+		
+		// Add group to dropdown
+		groupHtml = `<optgroup label="${groupName}">${groupHtml}</option>`;
+		dropdownHtml += groupHtml;
+		
+	});
+	console.log(electionMappings);
+	
+	// Add all downloads to dropdown
+	dropdown.html(dropdownHtml);
+	
+	// Select default election
+	var lastUrl = localStorage.getItem('sjo-api-url');
+	console.log(lastUrl);
+	if (lastUrl) {
+		dropdown.find(`option[value="${lastUrl}"]`).first().prop({selected: true});
+		dropdown.trigger('change');
+	}
+	
+	// Style dropdown after adding options
+	dropdown.chosen();
 
+}
+
+function applyCurrentFlag() {
+	if ($('#sjo-api-option-raw').is(':checked')) {
+		outputRaw();
+	} else {
+		applyFilters();
+	}
+}
+
+function gotoPage(newPageNo) {
+	console.log('gotoPage', newPageNo);
+	if ((newPageNo >= 1 && newPageNo <= maxPageNo) || newPageNo == Infinity) {
+		pageNo = newPageNo;
+		renderTable();
+	}
+}
+
+function pauseDuplicates() {
+	dupesActive = false;
+	$('#sjo-api-button-dupes-pause').hide();
+	$('#sjo-api-button-dupes-resume').show();
+	$('#sjo-api-button-dupes-more').show();
+}
+
+function resumeDuplicates() {
+	dupesActive = true;
+	$('#sjo-api-button-dupes-pause').show();
+	$('#sjo-api-button-dupes-resume').hide();
+	$('#sjo-api-button-dupes-more').hide();
+}
+
+function toggleInvalidOnly() {
+	$('#sjo-api-table').toggleClass('sjo-api-invalidonly', $('#sjo-api-invalidonly').prop('checked'));
+}
+
+function startDownload(event) {
+	
+	// Get URL to be downloaded
+	var button = $(event.target);
+	if (button.is('.sjo-api-button-downloadall')) {
+		currentUrl = button.attr('sjo-api-url') ? button.attr('sjo-api-url') : allCandidatesUrl
+		currentDate = button.attr('sjo-api-date');
+	} else {
+		currentUrl = $('#sjo-api-select').val();
+		currentDate = null;
+		localStorage.setItem('sjo-api-url', currentUrl);
+	}
+	console.log('startDownload', currentUrl, currentDate);
+	
 	// Download and parse CSV
-	Papa.parse(url, {
+	Papa.parse(currentUrl, {
 		'download': true,
 		'header': true,
 		'delimiter': ',',
@@ -311,7 +438,7 @@ function startDownload() {
 		'skipEmptyLines': true,
 		'complete': parseComplete,
 	});
-		
+	
 }
 
 function parseComplete(results) {
@@ -319,9 +446,19 @@ function parseComplete(results) {
 	
 	// Reset page
 	$('#sjo-api-error').empty().hide();
-	$('#sjo-api-table-dupes').empty().hide();
-	$('#sjo-api-status-dupes').empty();
+	$('#sjo-api-invalidonly').prop('checked', false);
+	$('#sjo-api-invalidonly-wrapper').show();
+	$('#sjo-api-textarea-raw').hide();
+	$('#sjo-api-table').hide();
+	$('.sjo-api-paging').hide();
 	pageNo = 1;
+
+	// Reset dupe finding
+	$('#sjo-api-dupes-wrapper').show();
+	$('#sjo-api-button-dupes').show();
+	$('#sjo-api-button-dupes-pause, #sjo-api-button-dupes-resume, #sjo-api-button-dupes-more').hide();
+	$('#sjo-api-status-dupes').empty();
+	$('#sjo-api-table-dupes').empty().hide();
 	
 	// Display errors
 	if (results.errors.length > 0) {
@@ -336,23 +473,33 @@ function parseComplete(results) {
 	
 	// Clean data
 	data = results.data;
-	console.log('cleanData');
+	console.log('parseComplete', data.length);
 	$.each(data, (index, candidate) => cleanData(index, candidate));
 	
-	// Auto truncate based on current elections flag
-	var current = url == allCandidatesUrl && $('#sjo-api-current').is(':checked');
-	if (current && $('#sjo-api-autotruncate').is(':checked')) {
-		data = $.grep(data, candidate => candidate.election_current);
+	// Auto truncate
+	if (currentUrl == allCandidatesUrl) {
+		if ($('#sjo-api-current').is(':checked') && $('#sjo-api-autotruncate').is(':checked')) {
+			data = $.grep(data, candidate => candidate.election_current);
+		}
+		console.log('parseComplete', data.length);
+		if (currentDate) {
+			data = $.grep(data, candidate => candidate.election_date == currentDate);
+		}
+		console.log('parseComplete', data.length);
 	}
 	
 	// Set initial sort
-	sortColumn = tableFields.indexOf('_row');
+	sortColumn = tableFieldNames.indexOf('_row');
 	sortOrder = 1;
 	console.log('parseComplete', sortColumn, sortOrder);
 	updateSortIcon();
 	
 	// Render table
-	buildFilters();
+	if ($('#sjo-api-option-raw').is(':checked')) {
+		outputRaw();
+	} else {
+		buildFilters();
+	}
 	
 }
 
@@ -366,6 +513,9 @@ function cleanData(index, candidate) {
 	// Row number
 	candidate._row = index + 1;
 	
+	// Placeholder value
+	candidate._placeholder = '';
+	
 	// Parse integer values
 	candidate.id = candidate.id === '' ? '' : parseInt(candidate.id);
 	candidate.party_list_position = candidate.party_list_position === '' ? '' : parseInt(candidate.party_list_position);
@@ -374,46 +524,35 @@ function cleanData(index, candidate) {
 	// TODO: parse party_list_position here?
 	candidate.election_current = candidate.election_current == 'True';
 	candidate.party_lists_in_use = candidate.party_lists_in_use == 'True';
-	candidate.elected = 
-		candidate.elected == 'True' ? true : 
-		candidate.elected == 'False' ? false : 
-		null;
+	candidate.elected = candidate.elected == 'True';
 	
 	// Tweak historical general election IDs for consistency
+	// TODO: make a separate column for this?
 	candidate.election = 
 		candidate.election == '2010' ? 'parl.2010-05-06' :
 		candidate.election == '2015' ? 'parl.2015-05-07' :
 		candidate.election;
 	
 	// Tweak ward names
+	// TODO: make a separate column for this?
 	candidate.post_label = candidate.post_label.replace(/^Police and Crime Commissioner for | ward$/, '');
 	
 	// Election
 	//candidate._election = candidate.election.match(/^(local\.[^\.]+|[^\.]+)\./)[1];
-	candidate._election = candidate.election.match(/^(parl|pcc|nia|(local|sp|naw|gla|mayor)\.[^\.]+)\./)[1];
-	candidate._election_group = candidate._election.split('.')[0];
+	// TODO: election type should be sp.r not sp?
+	var electionMatch = candidate.election.match(/^(parl|pcc|nia|(local|sp|naw|gla|mayor)\.[^\.]+)\.(.+\.)?(\d{4}-\d{2}-\d{2})$/);
+	candidate._election = electionMatch[1];
+	candidate._election_name = electionMappings[candidate._election];
+	candidate._byelection = electionMatch[3] ? electionMatch[3] : '';
+	candidate._election_type = candidate._election.split('.')[0];
 	
 	// Country
-	var place = candidate._election + (candidate._election == candidate._election_group ? '.' + candidate.post_label.toLowerCase().trim().replace(/\s+/g, '-') : '');
+	var place = candidate._election + (candidate._election == candidate._election_type ? '.' + candidate.post_label.toLowerCase().trim().replace(/\s+/g, '-') : '');
 	candidate._country = getCountryForElection(place);
-	
-	/*
-	if (place.match(/^sp\.|^(local|parl)\.[^.]*(aberdeen|airdrie|angus|argyll|ayrshire|banff|berwick|caithness|carrick|clackmannan|coatbridge|cumbernauld|dumfries|dundee|du[mn]barton|edinburgh|eilean|falkirk|fife|glasgow|glenrothes|gordon|hamilton|highland|inverclyde|inverness|kilbride|kilmarnock|kirkcaldy|lanark|livingston|lothian|moray|motherwell|orkney|perth|renfrew|scottish|shetland|skye|stirling)/)) {
-		candidate._country = 'SC';
-	} else if (place.match(/^naw\.|^(local|parl|pcc)\.[^.]*(aberavon|anglesey|arfon|brecon|bridgend|caerphilly|cardiff|carmarthen|ceredigion|clwyd|conwy|cynon|deeside|delyn|denbigh|flint|glamorgan|gower|gwent|gwynedd|islwyn|llanelli|meirionnydd|merthyr|monmouth|montgomery|neath|newport|ogmore|pembroke|pontypridd|powys|rhondda|swansea|torfaen|wales|wrexham|ynys)/)) {
-		candidate._country = 'WA';
-	} else if (place.match(/^nia\.|^(local|parl)\.[^.]*(antrim|armagh|belfast|causeway|derry|(north|south)-down([^s]|$)|fermanagh|foyle|lagan-valley|lisburn|newry|strangford|tyrone|ulster|upper-bann)/)) {
-		candidate._country = 'NI';
-	} else {
-		candidate._country = 'EN';
-	}
-	*/
-	
-	// TODO: region
 	
 	// Election year and age at election
 	// TODO: fix sorting of ages outside the range 10-99
-	candidate._election_year = parseInt(candidate.election_date.substr(0, 4));
+	candidate._election_year = +candidate.election_date.substr(0, 4);
 	if (candidate.birth_date) {
 		if (candidate.birth_date.length == 4) {
 			var ageThisYear = candidate._election_year - candidate.birth_date;
@@ -424,14 +563,6 @@ function cleanData(index, candidate) {
 	} else {
 		candidate._age_at_election = '';
 	}
-	
-	// Gender
-	candidate.gender = candidate.gender.trim();
-	candidate._gender_icon = 
-		candidate.gender === '' ? '' : 
-		candidate.gender.match(/^(m|male|mr\.?)$/i) ? '\u2642' :
-		candidate.gender.match(/^(f|female|(mrs|miss|ms)\.?)$/i) ? '\u2640' :
-		'?';
 	
 	// Split name
 	// TODO: deal with peerage titles like Lord Cameron of Roundwood
@@ -444,12 +575,28 @@ function cleanData(index, candidate) {
 		candidate._suffix = '';
 	}
 	nameMatch = name.match(/^(.*?)\s+(((st\.?|de|de la|le|van|van de|van der|von|di|da|ab|ap|\u00D3|N\u00ED|al|el)\s+.*?)|\S+)$/i);
-	candidate._last_name = nameMatch[2];
-	nameMatch = nameMatch[1].match(/^(\S+)(\s+(.*?))?$/);
-	candidate._first_name = nameMatch[1];
-	candidate._middle_names = nameMatch[3] ? nameMatch[3] : '';
-	candidate._short_name = candidate._first_name + ' ' + candidate._last_name;
+	if (nameMatch) {
+		candidate._last_name = nameMatch[2];
+		nameMatch = nameMatch[1].match(/^(\S+)(\s+(.*?))?$/);
+		candidate._first_name = nameMatch[1];
+		candidate._middle_names = nameMatch[3] ? nameMatch[3] : '';
+	} else {
+		candidate._last_name = name;
+		candidate._first_name = '';
+		candidate._middle_names = '';
+	}
+	candidate._short_name = (candidate._first_name + ' ' + candidate._last_name).trim();
 	candidate._normal_name = (nameNorms[candidate._first_name] ? nameNorms[candidate._first_name] : candidate._first_name) + ' ' + candidate._last_name;
+	
+	// Gender
+	candidate.gender = candidate.gender.trim();
+	candidate._gender = 
+		candidate.gender === '' ? '' : 
+		candidate.gender.match(/^(m|male|mr\.?)$/i) ? 'm' :
+		candidate.gender.match(/^(f|female|(mrs|miss|ms)\.?)$/i) ? 'f' :
+		'?';
+	candidate._gender_icon = {'m': '\u2642', 'f': '\u2640', '?': '?', '': ''}[candidate._gender];
+	candidate._maleness = candidate._gender ? ['f', '?', 'm'].indexOf(candidate._gender) / 2 : genderData[candidate._first_name] ? genderData[candidate._first_name].est.male : 0.5;
 	
 	// Party group
 	// TODO: group "Independent" parties together
@@ -511,6 +658,47 @@ function truncateDataTable() {
 
 }
 
+// Reapply filters on checkbox change
+// https://css-tricks.com/indeterminate-checkboxes/
+function cycleCheckbox(event) {
+	
+	var filter = $(event.target);
+	var colIndex = filter.closest('td').prop('cellIndex');
+	var column = tableColumns[colIndex];
+	var field = dataFields[column.name];
+	console.log(colIndex, field.group, event.ctrlKey);
+	
+	// If Ctrl is pressed, apply the change to all columns in the same group
+	var checkboxes = (field.group && event.ctrlKey) ? $('.sjo-api-filter-group-' + field.group) : filter;
+	console.log(checkboxes);
+	
+	switch(filter.data('sjo-api-checked')) {
+
+	// unchecked, going indeterminate
+	case 0:
+		checkboxes.data('sjo-api-checked', 1);
+		checkboxes.prop('indeterminate', true);
+		break;
+
+	// indeterminate, going checked
+	case 1:
+		checkboxes.data('sjo-api-checked', 2);
+		checkboxes.prop('indeterminate', false);
+		checkboxes.prop('checked', true);                
+		break;
+
+	// checked, going unchecked
+	default:
+		checkboxes.data('sjo-api-checked', 0);
+		checkboxes.prop('indeterminate', false);
+		checkboxes.prop('checked', false);
+
+	}
+	
+	applyFilters();
+	
+}
+
 // Display filters on selected columns
 function buildFilters() {
 	console.log('buildFilters');
@@ -531,9 +719,9 @@ function buildFilters() {
 				
 				// Add checkbox to table header
 				// TODO: add checkboxes to other sparse data (DOB, link fields, image, gender, elected)
-				// TODO: add two checkboxes, one for blanks, one for non-blanks
 				$(`<input type="checkbox" class="sjo-api-filter-checkbox" id="sjo-api-filter-__has_${column.name}">`)
-					.appendTo(cells[colIndex]);
+					.addClass(field.group ? 'sjo-api-filter-group-' + field.group : '')
+					.prop('indeterminate', true).data('sjo-api-checked', 1).click(cycleCheckbox).appendTo(cells[colIndex]);
 				
 			} else if (field.filter) {
 				
@@ -544,8 +732,8 @@ function buildFilters() {
 						values.push(candidate[column.name]);
 						
 						// Add wildcard options
-						if (column.name == '_election' && url == allCandidatesUrl && candidate._election_group != candidate._election) {
-							var wildcardOption = candidate._election_group + '.*';
+						if (column.name == '_election' && currentUrl == allCandidatesUrl && candidate._election_type != candidate._election) {
+							var wildcardOption = candidate._election_type + '.*';
 							if (values.indexOf(wildcardOption) < 0) {
 								values.push(wildcardOption);
 							}
@@ -555,13 +743,21 @@ function buildFilters() {
 				});
 				
 				// Don't show filter for only one value
-				console.log('buildFilters', field, values);
+				console.log('buildFilters', column, field, values);
 				if (values.length <= 1) return;
 				
 				// Add dropdown to table header
-				$(`<select multiple class="sjo-api-filter" id="sjo-api-filter-${column.name}"></select>`)
+				var dropdown = $(`<select multiple class="sjo-api-filter" id="sjo-api-filter-${column.name}"></select>`)
 					.html(values.sort().map(value => `<option>${escapeHtml(value)}</option>`).join(''))
 					.appendTo(cells[colIndex]);
+				
+				// Select defaults
+				// TODO: don't reapply after truncating
+				if (defaultFilters[column.name]) {
+					console.log('buildFilters', defaultFilters[column.name]);
+					var options = dropdown.find('option');
+					$.each(defaultFilters[column.name], (index, value) => options.filter((index, option) => option.value == value).prop('selected', true));
+				}
 				
 			}
 			
@@ -601,11 +797,12 @@ function applyFilters(callback) {
 			
 			// Get checkbox status
 			var checked = filter.prop('checked');
-			console.log('applyFilters', colIndex, column, checked, filter);
+			var indeterminate = filter.prop('indeterminate');
+			console.log('applyFilters', colIndex, column, checked, indeterminate, filter);
 			
 			// Update the data set with the filter value
 			$.each(data, (index, candidate) => {
-				candidate.__filters[colIndex] = !checked || candidate[column.name];
+				candidate.__filters[colIndex] = indeterminate || checked === !!candidate[column.name];
 			});
 			
 		} else {
@@ -635,7 +832,7 @@ function applyFilters(callback) {
 	});
 	
 	// Apply the current elections filter
-	var current = url == allCandidatesUrl && $('#sjo-api-current').is(':checked');
+	var current = currentUrl == allCandidatesUrl && $('#sjo-api-current').is(':checked');
 	console.log('applyFilters', current);
 	$.each(data, (index, candidate) => {
 		candidate.__filters[tableColumns.length] = current ? candidate.election_current : true;
@@ -730,6 +927,7 @@ function renderTable(callback) {
 	// Replace the table body
 	$('#sjo-api-table tbody').html(renderData.bodyHtml.join(''));
 	$('#sjo-api-table').show();
+	$('#sjo-api-table tr:has(.sjo-api-invalid)').addClass('sjo-api-invalid');
 	
 	// Change status message
 	$('#sjo-api-status').text('Matched ' + 
@@ -745,20 +943,24 @@ function renderTable(callback) {
 	$('.sjo-api-paging-prev').toggleClass('sjo-api-disabled', pageNo == 1 || pageNo == Infinity);
 	$('.sjo-api-paging-next').toggleClass('sjo-api-disabled', pageNo == maxPageNo || pageNo == Infinity);
 	$('.sjo-api-paging-all').toggleClass('sjo-api-paging-current', pageNo == Infinity);
-	$('.sjo-api-paging').toggle(renderData.numRowsMatched > maxTableRows);
+	$('.sjo-api-paging').show(); //toggle(renderData.numRowsMatched > maxTableRows);
 	
 	// Toggle display of columns
 	$('#sjo-api-table').toggleClass('sjo-api-table-has-party-lists', data.some(candidate => candidate.party_lists_in_use));
 	$('#sjo-api-table').toggleClass('sjo-api-table-has-results', data.some(candidate => candidate.elected));
 	
 	// Toggle display of truncation button
+	// TODO: base this on row count?
 	var current = $('#sjo-api-current').is(':checked');
 	var currentSet = new Set(data.map(candidate => candidate.election_current));
 	console.log('renderTable', current, currentSet);
-	$('#sjo-api-button-truncate').toggle((current && currentSet.has(false)) || $('.sjo-api-filter option:selected').length > 0);
+	$('#sjo-api-button-truncate').toggle((current && currentSet.has(false)) || $('.sjo-api-filter option:selected').length > 0 || $('.sjo-api-filter-checkbox').filter((index, element) => $(element).data('sjo-api-checked') != 1).length > 0);
 	
 	// Display dupes button
 	$('#sjo-api-button-dupes').show();
+	
+	// Display invalid rows only
+	toggleInvalidOnly();
 	
 	// Set up filters on first render
 	if (callback) callback.call();
@@ -822,18 +1024,21 @@ function buildTableRowCells(candidate) {
 		var field = dataFields[column.name];
 		
 		// Build cell content
-		var content = '';
-		if (candidate[column.name]) {
-			var value = column.has ? field.abbr : field.format == 'html' ? candidate[column.name] : escapeHtml(candidate[column.name]);
+		// TODO: add popups for has: values
+		var content = '', title = '';
+		if (candidate[column.name] !== null && candidate[column.name] !== false && candidate[column.name] !== '') {
+			var value = column.has ? field.abbr : field.dp ? candidate[column.name].toFixed(field.dp) : escapeHtml(candidate[column.name]);
 			content = field.link ? `<a href="${getLinkAddress(field, candidate)}">${value}</a>` : value;
+			title = column.has ? escapeHtml(candidate[column.name]) : '';
 		}
 		
+		// Set classes
 		var classes = [`sjo-api-cell-${column.has ? '__has_' : ''}${column.name}`];
 		if (field.icon) classes.push('sjo-api-cell-icon');
 		if (content && field.validate && !field.validate.call(this, candidate[column.name], candidate)) classes.push('sjo-api-invalid');
 		
 		// Return cell HTML
-		return `<td class="${classes.join(' ')}">${content}</td>`;
+		return `<td class="${classes.join(' ')}" title="${title}">${content}</td>`;
 		
 	});
 	
@@ -843,7 +1048,7 @@ function buildTableRowCells(candidate) {
 
 // Sort available filters at the top, and grey out others
 function tidyFilters() {
-	var current = url == allCandidatesUrl && $('#sjo-api-current').is(':checked');
+	var current = currentUrl == allCandidatesUrl && $('#sjo-api-current').is(':checked');
 	console.log('tidyFilters', current);
 	
 	// Go through all filterable fields
@@ -873,9 +1078,10 @@ function tidyFilters() {
 					values.push(candidate[column.name]);
 					
 					// Add wildcard options
-					if (column.name == '_election' && url == allCandidatesUrl && candidate._election_group != candidate._election) {
-						if (values.indexOf(candidate._election_group + '.*') < 0) {
-							values.push(candidate._election_group + '.*');
+					// TODO: this is duplicate code?
+					if (column.name == '_election' && currentUrl == allCandidatesUrl && candidate._election_type != candidate._election) {
+						if (values.indexOf(candidate._election_type + '.*') < 0) {
+							values.push(candidate._election_type + '.*');
 						}
 					}
 					
@@ -896,6 +1102,75 @@ function tidyFilters() {
 }
 
 // ================================================================
+// Output raw data
+// ================================================================
+
+function outputRaw() {
+	
+	var renderData = buildRawOutput();
+	
+	$('#sjo-api-textarea-raw').html(renderData.bodyHtml.join('\r\n')).show();
+
+	// Change status message
+	$('#sjo-api-status').text('Matched ' + 
+		(renderData.numRowsMatched == data.length ? '' : 
+			renderData.numRowsMatched + ' of ') + data.length + ' rows').show();
+	
+	$('#sjo-api-button-truncate').hide();
+	$('#sjo-api-invalidonly-wrapper').hide();
+	$('#sjo-api-button-dupes').show();
+	
+	function buildRawOutput() {
+		console.log('buildRawOutput');
+
+		// Initialise row count
+		var bodyHtml = [];
+		var numRowsMatched = 0;
+		var numRowsDisplayed = 0;
+		var current = $('#sjo-api-current').is(':checked');
+		console.log('buildRawOutput', current, data);
+		
+		// Loop through all data rows
+		$.each(data, function(index, candidate) {
+			
+			// Check if this row passes all the filters
+			if (current && !candidate.election_current) return;
+			numRowsMatched++;
+			
+			// Add row to table body
+			bodyHtml.push(buildRow(candidate).join('\t'));
+			numRowsDisplayed++;
+			
+		});
+		console.log('buildRawOutput', numRowsMatched, numRowsDisplayed);
+		
+		// Return values as an object
+		return {
+			'bodyHtml': 		bodyHtml,
+			'numRowsMatched': 	numRowsMatched,
+			'numRowsDisplayed': numRowsDisplayed,
+		};
+		
+	}
+
+	function buildRow(candidate) {
+		var cellValues = tableColumns.map(column => {
+			var field = dataFields[column.name];
+			if (candidate[column.name] === null || candidate[column.name] === false || candidate[column.name] === '') {
+				return '';
+			} else {
+				return column.has ? field.abbr : 
+					   field.dp ? candidate[column.name].toFixed(field.dp) : 
+					   typeof candidate[column.name] == 'string' ? candidate[column.name].replace(/\s+/g, ' ') : 
+					   candidate[column.name];
+			}
+		});
+		return cellValues;
+	}
+	
+}
+
+// ================================================================
 // Find likely duplicates
 // ================================================================
 
@@ -903,11 +1178,14 @@ function findDuplicates() {
 	console.log('findDuplicates');
 	
 	var minTotalScore = 0.90;
+	minTotalScore = 1;
 	var minNameScore = 0.98;
 	
 	// Clear previous results
 	var table = $('#sjo-api-table-dupes').empty();
-	
+	$('#sjo-api-button-dupes-pause').show();
+	$('#sjo-api-button-dupes').hide();
+
 	// Loop through 2017 candidacies
 	var groups = [];
 	var processed = [];
@@ -938,25 +1216,14 @@ function findDuplicates() {
 				$.each(unmatched, (index2, c2) => {
 					if (c2.__matched) return;
 					
-					// If the ID matches, add it
-					if (c2.id === c1.id) {
+					// Check score
+					var score = calcScore(c1, c2);
+					if (score.nameScore >= minNameScore && score.totalScore >= minTotalScore) {
+						
+						// Add this candidacy
 						c2.__matched = true;
 						pending.push(c2);
-					
-					// Exclude known false positives
-					} else if (dupeExclusions[c1.id] !== c2.id && dupeExclusions[c2.id] !== c1.id) {
-						
-						// Check score
-						var score = calcScore(c1, c2);
-						if (score.nameScore >= minNameScore && score.totalScore >= minTotalScore) {
-							
-							// Add this candidacy
-							//c2.__score = score;
-							c2.__matched = true;
-							pending.push(c2);
-							found = true;
-							
-						}
+						if (c1.id != c2.id) found = true;
 						
 					}
 					
@@ -974,29 +1241,46 @@ function findDuplicates() {
 		
 		index++;
 		if (index < unmatched.length) {
-			setTimeout(checkData, 10);
+			checkActiveFlag();
 		} else {
+			$('#sjo-api-button-dupes-pause, #sjo-api-button-dupes-resume, #sjo-api-button-dupes-more').hide();
 			$('#sjo-api-status-dupes').text(`Search complete; ${groups.length} groups found`);
 		}
 		
 	}
 	
+	function checkActiveFlag() {
+		if (dupesActive) {
+			setTimeout(checkData, 0);
+		} else {
+			setTimeout(checkActiveFlag, 1000);
+		}
+	}
+	
 	function calcScore(c1, c2) {
 		
-		var score = {'totalScore': 0, 'nameScore': 0};
+		if (c1.id == c2.id) return {'totalScore': 1, 'nameScore': 1};
+		
+		var zeroScore = {'totalScore': 0, 'nameScore': 0};
 		var totalScore = 1;
 		
-		// Check location similarity
+		// Weight down different countries
 		totalScore = totalScore * (c1._country === c2._country ? 1 : 0.95);
-		if (totalScore < minTotalScore) return score;
+		if (totalScore < minTotalScore) return zeroScore;
 		
-		// Check party similarity
+		// Weight down different parties
 		totalScore = totalScore * (c1._party_group === c2._party_group ? 1 : c1._party_group === null || c2._party_group === null ? 0.95 : 0.90);
-		if (totalScore < minTotalScore) return score;
+		if (totalScore < minTotalScore) return zeroScore;
 		
 		// Weight down different middle names 
-		totalScore = totalScore * (c1._middle_names !== '' && c2._middle_names !== '' && c1._middle_names !== c2._middle_names ? 0.95 : 1);
-		if (totalScore < minTotalScore) return score;
+		totalScore = totalScore * (c1._middle_names !== '' && c2._middle_names !== '' && c1._middle_names !== c2._middle_names ? 0.90 : 1);
+		if (totalScore < minTotalScore) return zeroScore;
+		
+		// Weight down conflicting elections
+		if (c1.election_date == c2.election_date && c1._election_type == c2._election_type) {
+			totalScore = totalScore * 0.95;
+			if (totalScore < minTotalScore) return zeroScore;
+		}
 		
 		// Calculate name similarity
 		var nameScore = Math.max(                                                    jaroWinkler(c1.name,         c2.name),
@@ -1020,48 +1304,37 @@ function findDuplicates() {
 	function writeDupesTable(groupIndex, matches) {
 		
 		// Show table if any matches found
-		//if (groups.length > 0) {
-			table.show();
+		table.show();
+		
+		var groupClass = `sjo-api-dupes-group-${groupIndex + 1}`;
+		
+		// Sort the group by ID and date
+		matches.sort((a, b) => a.id > b.id || (a.id == b.id && a.election_date > b.election_date));
+		$.each(matches, (matchIndex, match) => {
 			
-			// Write all groups to table
-			//$.each(groups, (groupIndex, matches) => {
-				
-				//var bestScore = 0;
-				var groupClass = `sjo-api-dupes-group-${groupIndex + 1}`;
-
-				// Sort the group by ID and date
-				matches.sort((a, b) => a.id > b.id || (a.id == b.id && a.election_date > b.election_date));
-				$.each(matches, (matchIndex, match) => {
-					
-					// Recalculate the score against all the other matches
-					var score = matches.reduce((acc, other) => other.id == match.id ? acc : Math.max(acc, calcScore(match, other).totalScore), 0);
-					//bestScore = Math.max(bestScore, score);
-					
-					// Write to the dupes table
-					var row = $(`<tr class="${groupClass}"></tr>`)
-						.addClass(matchIndex === 0 ? 'sjo-api-dupes-first' : '')
-						.addCell(groupIndex + 1)
-						.addCell(match.id)
-						.addCell('') // blank column for links
-						.addCellHTML('<a href="' + getLinkAddress(dataFields['name'], match) + '">' + match.name + '</a>')
-						.addCell(match.election_date)
-						.addCell(match._election)
-						.addCell(match.post_label)
-						.addCell(match.party_name)
-						//.addCell(match.party_id)
-						.addCell(score.toFixed(2))
-						.appendTo(table);
-						
-					if (score >= 0.95) {
-						//$(`.${groupClass}`).addClass('sjo-api-dupes-verymuch');
-						row.addClass('sjo-api-dupes-verymuch');
-					}
-					
-				});
-				
-			//});
+			// Recalculate the score against all the other matches
+			var score = matches.reduce((acc, other) => Math.max(acc, calcScore(match, other).totalScore), 0);
 			
-		//}
+			// Write to the dupes table
+			var row = $(`<tr class="${groupClass}"></tr>`)
+				.addClass(matchIndex === 0 ? 'sjo-api-dupes-first' : '')
+				.addCell(groupIndex + 1)
+				.addCell(match.id)
+				.addCell('') // blank column for links
+				.addCellHTML('<a href="' + getLinkAddress(dataFields['name'], match) + '">' + match.name + '</a>')
+				.addCell(match.election_date)
+				.addCell(match._election)
+				.addCell(match.post_label)
+				.addCell(match.party_name)
+				.addCell(score.toFixed(2))
+				.appendTo(table);
+				
+			if (score >= 1) {
+				row.addClass('sjo-api-dupes-verymuch');
+				//pauseDuplicates();
+			}
+			
+		});
 		
 	}
 	
@@ -1164,6 +1437,7 @@ function jaroWinkler(s1, s2) {
 // ================================================================
 
 // TODO: move this to Github
+// TODO: properly pair names so e.g. Samuel does not match Samantha
 var nameNorms = {
 	'Alex':		'Alexander',
 	'Mandy':	'Amanda',
@@ -1219,6 +1493,7 @@ var nameNorms = {
 	'Katie':	'Katherine',
 	'Katy': 	'Katherine',
 	'Kim':		'Kimberly',
+	'Kris':		'Kristian',
 	'Les':		'Leslie',
 	'Matt':		'Matthew',
 	'Mick':		'Michael',
@@ -1262,15 +1537,4 @@ var nameNorms = {
 	'Billy':	'William',
 	'Will':		'William',
 	'Willie':	'William',
-};
-
-// IDs that have been definitely ruled out as duplicates
-var dupeExclusions = {
-	6329:  6384,  6384: 13420, 13420: 6329,	// Zulfiqar Ali
-	2137:  19640,							// Mark Durkan
-	11540: 13370, 							// Paul Givan/Girvan
-	10774: 19167, 							// Sarah Elizabeth Haydon
-	7502:  8089,  8089: 16794, 16794: 7502,	// Elin Jones
-	308:   20336,							// IDS/Iain Smith
-	4032:  5282,							// Chris Foote Wood/Christopher Wood
 };
