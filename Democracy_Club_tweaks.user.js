@@ -2,7 +2,7 @@
 // @name        Democracy Club tweaks
 // @namespace   sjorford@gmail.com
 // @include     https://candidates.democracyclub.org.uk/*
-// @version     2017-04-10
+// @version     2017-04-18
 // @grant       none
 // @require     https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.12.0/moment.min.js
 // @require     https://raw.githubusercontent.com/sjorford/js/master/sjo-jq.js
@@ -23,9 +23,6 @@ $(`<style id="sjo-style-tweaks">
 	.sjo-number {text-align: right;}
 	.counts_table td, .counts_table th {padding: 4px !important;}
 	.select2-results {max-height: 500px !important;}
-	.form_group h3 {display: none !important;}
-	.form_group p {display: inline-block !important; vertical-align: top !important; width: 30% !important; padding-right: 1%; margin-bottom: 0 !important;}
-	.form_group p input {margin-bottom: 0.5rem !important;}
 	.version .button {padding: 2px 4px !important}
 	.sjo-list-dt, .sjo-list-dd {margin-bottom: 0px !important;}
 	.sjo-list-dt, .sjo-label {float: left; width: 125px;}
@@ -68,7 +65,6 @@ $(`<style id="sjo-style-tweaks">
 	.sjo-addperson-text {color: inherit;}
 	.sjo-addperson-latest .sjo-addperson-button {background-color: #fc0 !important;}
 	.sjo-addperson-latest .sjo-addperson-text {font-weight: bold;}
-	.sjo-posts-listcolumns {column-width: 250px; -moz-column-width: 250px;}
 	xxx.sjo-recent-unknown, xxx.sjo-recent-unknown.sjo-mychanges {background-color: #daa !important;}
 	.header__nav .large-4 {width: 33.33333% !important;}
 	.header__nav .large-6 {width: 50% !important;}
@@ -88,7 +84,20 @@ $(`<style id="sjo-style-tweaks">
 	.sjo-bulkadd-listitem input {margin-bottom: 0 !important}
 	.sjo-bulkadd-data {font-size: 0.75rem; xxxcolor: #aaa; margin-bottom: 0rem !important; list-style-type: none;}
 	.sjo-bulkadd-link {font-weight: bold;}
-	xxx.no-candidates {display: inline-block; width: 88%; margin-left: 0.5rem;}
+	
+	/* http://stackoverflow.com/a/26637893/1741429 */
+	.sjo-posts-listcolumns {column-width: 250px; -moz-column-width: 250px;}
+	.sjo-post {border: 1px solid white; overflow: hidden; page-break-inside: avoid;}
+	.sjo-post-incomplete {background-color: #fdd;}
+	.sjo-post-complete {background-color: #ffb;}
+	.sjo-post-verified {background-color: #bbf7bb;}
+
+	.show-new-candidate-form {display: none;}
+	
+	.form_group h3 {display: none !important;}
+	.form_group p {display: inline-block !important; vertical-align: top !important; width: 48% !important; padding-right: 1%; margin-bottom: 0 !important;}
+	.form_group p input {margin-bottom: 0.5rem !important;}
+	
 	.select2-result-label {font-size: 0.8rem;}
 	.person__actions__action {padding: 1em; margin-bottom: 1em;}
 	.person__actions__action h2 {margin-top: 0 !important;}
@@ -97,6 +106,7 @@ $(`<style id="sjo-style-tweaks">
 	.sjo-is-current {font-weight: bold;}
 	.sjo-search-exact {border: 2px solid gold; padding: 5px; margin-left: -7px; border-radius: 4px; background-color: #fff3b1;}
 	xxx.sjo-search-link {font-weight: bold; font-size: 0.75rem; margin-bottom: 0.5em; display: inline-block;}
+	.document_viewer {min-height: 700px;}
 </style>`).appendTo('head');
 
 $(function() {
@@ -122,59 +132,32 @@ $(function() {
 		element.href = element.href.replace(/electoral-commission:%20/, '');
 	});
 	
-	// Add candidate - list of elections
+	// Reformat various pages
 	if (url.indexOf(rootUrl + 'person/create/select_election?') === 0) {
 		formatAddCandidateButtons();
-	}
-	
-	// Compact lists of posts
-	if (url.indexOf(rootUrl + 'posts') === 0) {
-		var lists = $('.container ul:has(li+li+li+li+li)').addClass('sjo-posts-listcolumns');
-		lists.find('a:contains("Member of the Legislative Assembly for")')
-			.each((index, li) => li.innerHTML = li.innerHTML.replace(/^Member of the Legislative Assembly for /, ''));
-	}
-	
-	// Compact candidate pages
-	if (url.indexOf(rootUrl + 'person/') === 0 && $('.person__hero').length > 0) {
+	} else if (url.indexOf(rootUrl + 'posts') === 0) {
+		formatPostsList();
+	} else if ((url.indexOf(rootUrl + 'person/') === 0 && url.indexOf('/update') > 0) || (url.indexOf(rootUrl + 'election/') === 0 && url.indexOf('/person/create/') > 0)) {
 		formatCandidatePage();
-	}
-	
-	// Format update pages and new person pages
-	if ((url.indexOf(rootUrl + 'person/') === 0 && url.indexOf('/update') > 0) || (url.indexOf(rootUrl + 'election/') === 0 && url.indexOf('/person/create/') > 0)) {
 		formatEditForm();
-	}
-	
-	// Get extra data on bulk adding page
-	if (url.indexOf(rootUrl + 'bulk_adding/') === 0) {
-		if (url.indexOf('/review/') >= 0) {
-			formatBulkAddReviewPage();
-		} else {
-			formatBulkAddPage();
-		}
-	}
-	
-	// Compact main statistics page
-	if (url == rootUrl + 'numbers/') {
+	} else if (url.indexOf(rootUrl + 'person/') === 0 && $('.person__hero').length > 0) { // what was the second bit for again?
+		formatCandidatePage();
+	} else if (url.indexOf(rootUrl + 'bulk_adding/') === 0 && url.indexOf('/review/') >= 0) {
+		formatBulkAddReviewPage();
+	} else if (url.indexOf(rootUrl + 'bulk_adding/') === 0 && url.indexOf('/review/') < 0) {
+		formatBulkAddPage();
+	} else if (url == rootUrl + 'numbers/') {
 		formatStatistics();
-	}
-
-	// Compact recent changes pages
-	if (url.indexOf(rootUrl + 'recent-changes') === 0) {
+	} else if (url.indexOf(rootUrl + 'recent-changes') === 0) {
 		formatRecentChanges();
-	}
-	
-	// Format page lock suggestions
-	if (url.indexOf(rootUrl + 'moderation/suggest-lock') === 0) {
+	} else if (url.indexOf(rootUrl + 'moderation/suggest-lock') === 0) {
 		formatLockSuggestions();
-	}
-	
-	function formatLockSuggestions() {
-		$('.container li').filter((index, element) => element.innerText.indexOf('User sjorford suggested locking this') >= 0).addClass('sjo-mysuggestion');
-	}
-	
-	// Format results pages
-	if ($('h1:contains("Results")').length > 0) {
+	} else if (url.indexOf(rootUrl + 'upload_document/') === 0) {
+		$('.header__hero').hide();
+	} else if ($('h1:contains("Results")').length > 0) {
 		formatResultsPage();
+	} else if (url.indexOf('https://candidates.democracyclub.org.uk/search?') === 0) {
+		highlightSearchResults();
 	}
 	
 	// TODO: hide long list of parties with no candidates
@@ -186,12 +169,24 @@ $(function() {
 	if (container.html().trim() === '') container.remove();
 	if (hero.html().trim() === '') hero.remove();
 	
-	// Highlight search results
-	if (url.indexOf('https://candidates.democracyclub.org.uk/search?') === 0) {
-		highlightSearchResults();
-	}
-	
 });
+
+function formatLockSuggestions() {
+	
+	// Highlight my lock suggestions
+	$('.container li').filter((index, element) => element.innerText.indexOf('User sjorford suggested locking this') >= 0).addClass('sjo-mysuggestion');
+	
+	// Group by election and sort
+	var headings = $('.content h3');
+	var elections = headings.toArray().map(element => $('a', element).attr('href').match(/election\/(.*?)\.\d{4}-\d{2}-\d{2}\//)[1]).sort();
+	$.each(elections, (index, electionId) => {
+		if (index != elections.indexOf(electionId)) return;
+		var headingsGroup = headings.filter(':has(a[href*="/' + electionId + '."])');
+		var everything = headingsGroup.add(headingsGroup.next('ul'));
+		$('<h2></h2>').text(electionId).appendTo('.content .container').after(everything);
+	});
+	
+}
 
 function highlightSearchResults() {
 	
@@ -206,6 +201,20 @@ function highlightSearchResults() {
 			item.addClass('sjo-search-exact');
 		}
 	});
+	
+}
+
+function formatPostsList() {
+	
+	var lists = $('.content ul');
+	//lists.filter(':has(li+li)').addClass('sjo-posts-listcolumns');
+	lists.addClass('sjo-posts-listcolumns');
+	lists.find('a:contains("Member of the Legislative Assembly for")')
+		.each((index, element) => element.innerHTML = element.innerHTML.replace(/^Member of the Legislative Assembly for /, ''));
+	
+	$('abbr:contains("\u{1f513}")').closest('li').addClass('sjo-post-complete');
+	$('abbr:contains("\u{1f512}")').closest('li').addClass('sjo-post-verified');
+	$('li', lists).addClass('sjo-post').not('.sjo-post-complete, .sjo-post-verified').addClass('sjo-post-incomplete');
 	
 }
 
@@ -632,13 +641,17 @@ function formatBulkAddPage() {
 	// TODO: add this to other edit pages
 	$('<input type="checkbox" id="sjo-reverse" value="reverse" checked><label for="sjo-reverse">Surname first</label>').insertBefore('#bulk_add_form').wrapAll('<div></div>');
 	
+	// Hide noobstructions
+	var heading = $('h3:contains("How to add or check candidates")');
+	heading.next('ol').addClass('sjo-bulkadd-instructions').hide();
+	$('<a role="button" style="font-size: small;">Show</a>').click(event => $('.sjo-bulkadd-instructions').toggle()).appendTo(heading).before(' ');
+	
 }
 
 function formatBulkAddReviewPage() {
 	
 	$('form h2').each(addSearchLink);
 	
-	// TODO: this is now broken due to website changes
 	$('form input[type="radio"]').each(lookupBulkAddData);
 	
 	function addSearchLink(index, element) {
@@ -655,8 +668,8 @@ function formatBulkAddReviewPage() {
 		
 		// Get ID of matching person
 		var input = $(element);
-		input.closest('label').addClass('sjo-bulkadd-listitem')
-			.find('a').addClass('sjo-bulkadd-link');
+		var link = input.closest('label').addClass('sjo-bulkadd-listitem').find('a').addClass('sjo-bulkadd-link');
+		if (link.length > 0) link.html(link.html().replace(/\(previously stood in .*? candidate\)/, ''));
 		var personID = input.val();
 		if (personID == '_new') return;
 		
@@ -816,21 +829,24 @@ function formatStatistics() {
 				var row = $('<tr></tr>')
 					.attr('sjo-election-type', type)
 					.attr('sjo-election-key', key)
-					.append('<td>' + date + '</td>')
-					//.append('<td>' + type + '</td>')
-					.append('<td>' + key + '</td>')
-					.append('<td>' + area + '</td>')
-					.append('<td style="text-align: right;">' + candidates + '</td>');
+					.addCell(date)
+					.addCell(key)
+					.addCell(area)
+					.addCell(candidates, 'sjo-num');
 				
-				bullets.slice(1).each(function(index, element) {
+				bullets.each(function(index, element) {
 					var bullet = $(element);
 					var link = bullet.find('a');
-					if (link.length === 0) return; // *************************
-					link.html(link.html()
-						.replace(/^Candidates per /, 'by ')
-						.replace(/^See progress towards locking all posts$/, 'progress'));
-					$('<td class="sjo-nowrap"></td>').append(link).appendTo(row);
-					bullet.addClass('sjo-remove');
+					if (link.length > 0) {
+						link.html(link.html()
+							.replace(/^Candidates per /, 'by ')
+							.replace(/^See progress towards locking all posts$/, 'progress'));
+						$('<td class="sjo-nowrap"></td>').append(link).appendTo(row);
+						bullet.addClass('sjo-remove');
+					} else if (bullet.text().indexOf(':') >= 0) {
+						row.addCell(bullet.text().split(':')[1].trim(), 'sjo-num');
+						bullet.addClass('sjo-remove');
+					}
 				});
 				
 				if (prevRows.length > 0) {
@@ -868,6 +884,7 @@ function cleanInputValue(input) {
 	var value = input.value.trim().replace(/\s+/g, ' ');
 	
 	// Reformat names
+	// TODO: handle hyphens properly
 	if (input.name == 'q' || input.id == 'id_name' || input.id.match(/^id_form-\d+-name$/)) {
 		var match = value.match(/^(([-'A-Z]{3,})(\s*,)?)\s+(.*)$/);
 		if (match) {
