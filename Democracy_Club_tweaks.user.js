@@ -2,7 +2,7 @@
 // @name        Democracy Club tweaks
 // @namespace   sjorford@gmail.com
 // @include     https://candidates.democracyclub.org.uk/*
-// @version     2017-04-29
+// @version     2017-05-08
 // @grant       none
 // @require     https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.12.0/moment.min.js
 // @require     https://raw.githubusercontent.com/sjorford/js/master/sjo-jq.js
@@ -16,10 +16,18 @@ var knownPartiesOnly = true;
 
 // Styles
 $(`<style id="sjo-style-tweaks">
+	
+	.header__masthead {padding: 0.25em 1em;}
+	.header__nav {padding: 0.25em 0 0 0;}
+	.header__hero {padding-bottom: 0.5em;}
+	button, .button {margin-bottom: 0.5em;}
+	
+	.sjo-mychanges, .sjo-mysuggestion {background-color: #ffeb99 !important;}
+	.sjo-changes-candidacy-delete {background-color: pink !important;}
+	
 	.sjo-stats {font-size: 9pt;}
 	.sjo-stats td, .sjo-stats th, .sjo-lesspadding td, .sjo-lesspadding th {padding: 4px;}
 	.sjo-nowrap {white-space: nowrap;}
-	.sjo-mychanges, .sjo-mysuggestion {background-color: #ffeb99 !important;}
 	.sjo-number {text-align: right;}
 	.counts_table td, .counts_table th {padding: 4px !important;}
 	.select2-results {max-height: 500px !important;}
@@ -43,7 +51,10 @@ $(`<style id="sjo-style-tweaks">
 	input.sjo-input-empty {background-color: #ffc;}
 	.sjo-input#id_twitter_username {width: 360px; margin-left: -4px; display: inline-block;}
 	.sjo-prefix {display: inline-block; width: 30px; position: relative; top: 1px; height: 2rem; line-height: 2rem;}
-	h2 {margin-top: 1em !important; margin-bottom: 0.5em !important; xxxpadding-bottom: 0.1em !important;}
+	
+	.content {padding-top: 0.5em;}
+	.person__details dl {margin-bottom: 1em;}
+	h2 {margin-top: 0.5em !important; margin-bottom: 0.25em !important; padding-bottom: 0.25em !important;}
 	h3 {font-size: 1.2rem;}
 	#add_election_button {margin-bottom: 0;}
 	.person__versions {padding-top: 0;}
@@ -148,9 +159,13 @@ $(`<style id="sjo-style-tweaks">
 	.document_viewer {min-height: 600px;}
 	
 	table.sjo-tree tr {background-color: inherit;}
-	.sjo-tree td, .sjo-tree th {font-size: 8pt; padding: 2px; min-width: 20px; background-repeat: ;}
+	.sjo-tree td, .sjo-tree th {font-size: 8pt; padding: 2px; min-width: 20px;}
 	#sjo-versions-showall {display: block; font-size: 8pt; margin-bottom: 1em;}
 	.sjo-tree-current {background-color: gold;}
+	
+	.sjo-tree thead {background-color: inherit;}
+	.sjo-tree-year-inner {background: white;}
+	.sjo-tree-year {text-align: center; background: left center repeat-x url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAMSURBVBhXY2BgYAAAAAQAAVzN/2kAAAAASUVORK5CYII=');}
 	
 	.sjo-tree-horiz {background: repeat-x url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAASdEVYdFNvZnR3YXJlAEdyZWVuc2hvdF5VCAUAAAAsSURBVDhPY/wPBAxUBExQmmpg1EDKweA3kBGIR9MhZWA0L1MORg2kFDAwAAB9tQkdVRptbgAAAABJRU5ErkJggg==');}
 	.sjo-tree-turnup {background: no-repeat url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAASdEVYdFNvZnR3YXJlAEdyZWVuc2hvdF5VCAUAAABOSURBVDhPY/wPBAx4ACMjI5QFAQSUMzBBaaqBUQMpB/Q1ED3JEANAOvAnLDQwuNMhIdeBANEGEmMYCBDMy6SCgQ1DYsCogZQDKhvIwAAApcUVF6f1O7gAAAAASUVORK5CYII=');}
@@ -206,10 +221,13 @@ $(function() {
 		formatLockSuggestions();
 	} else if (url.indexOf(rootUrl + 'upload_document/') === 0) {
 		$('.header__hero').hide();
-	} else if ($('h1:contains("Results")').length > 0) {
+	//} else if ($('h1:contains("Results")').length > 0) {
+	} else if (url.indexOf(rootUrl + 'uk_results/posts/') === 0) {
 		formatResultsPage();
-	} else if (url.indexOf('https://candidates.democracyclub.org.uk/search?') === 0) {
-		highlightSearchResults();
+	} else if (url.indexOf(rootUrl + 'uk_results/') === 0) {
+		formatResultsPostList();
+	} else if (url.indexOf(rootUrl + 'search?') === 0) {
+		formatSearchResults();
 	}
 	
 	// TODO: hide long list of parties with no candidates
@@ -236,11 +254,11 @@ $(function() {
 	
 });
 
-function highlightSearchResults() {
+function formatSearchResults() {
 	
 	var searchName = $('form.search input[name="q"]').val().trim();
 	var regexString = '(^|\\s)' + searchName.replace(/[\.\*\?\[\]\(\)\|\^\$\\\/]/g, '\\$&').replace(/\s+/, '(\\s+|\\s+.*\\s+)') + '$';
-	console.log('highlightSearchResults', regexString);
+	console.log('formatSearchResults', regexString);
 	var regex = new RegExp(regexString, 'i');
 	
 	$('.candidates-list__person').each((index, element) => {
@@ -267,6 +285,8 @@ function formatPostsList() {
 	$('abbr:contains("\u{1f513}")').closest('li').addClass('sjo-post-complete');
 	$('abbr:contains("\u{1f512}")').closest('li').addClass('sjo-post-verified');
 	$('li', lists).addClass('sjo-post').not('.sjo-post-complete, .sjo-post-verified').addClass('sjo-post-incomplete');
+	
+	// TODO: format headings
 	
 }
 
@@ -354,11 +374,11 @@ function formatCandidatePage() {
 			
 			// Previous versions
 			if (section.hasClass('version')) {
-				if (dtText == 'Changes made') {
+				if (dtText.indexOf('Changes made') === 0) {
 					
 					// Format diff
-					//formatVersionChanges(dd);
-					dd.hide();
+					formatVersionChanges(dd);
+					//dd.hide();
 					
 				} else {
 					
@@ -400,6 +420,13 @@ function formatCandidatePage() {
 		}
 	});
 	
+	// Remove blah
+	//$('.person__actions__edit h2').filter((i, e) => e.innerHTML.trim() == 'Improve this data!').hide();
+	$('.person__actions__edit p').filter((i, e) => e.innerHTML.trim() == 'Our database is built by people like you.').hide();
+	$('.person__actions__edit p').filter((i, e) => e.innerHTML.trim() == 'Please do add extra details about this candidate – it only takes a moment.').hide();
+	$('.person__actions__data p').filter((i, e) => e.innerHTML.trim() == 'Open data JSON API:').hide();
+	$('.person__actions__data p').filter((i, e) => e.innerHTML.trim() == 'More details about getting <a href="/help/api">the data</a> and <a href="/help/about">its licence</a>.').hide();
+	
 	// Add upload link if not present
 	if ($('.person__actions__photo').length === 0) {
 		console.log(location.href);
@@ -413,6 +440,7 @@ function formatCandidatePage() {
 		}
 	}
 	
+	// Build version tree
 	reparseVersions();
 	
 }
@@ -461,13 +489,15 @@ function formatVersionChanges(dd) {
 			var row = $('<tr></tr>').addHeader(fieldName.replace(/\//g, ' \u203A ')).appendTo(versionTable);
 			
 			if (dataFrom.length > 0) {
-				row.addCell('-', 'sjo-version-delete sjo-version-op').addCell(cleanData(dataFrom), 'sjo-version-delete');
+				row.addCell('-', 'sjo-version-delete sjo-version-op')
+				   .addCellHTML(cleanData(dataFrom), 'sjo-version-delete');
 			} else {
 				row.addCell('', 'sjo-version-op').addCell('');
 			}
 			
 			if (dataTo.length > 0) {
-				row.addCell('-', 'sjo-version-add sjo-version-op').addCell(cleanData(dataTo), 'sjo-version-add');
+				row.addCell('-', 'sjo-version-add sjo-version-op')
+				   .addCellHTML(cleanData(dataTo), 'sjo-version-add');
 			} else {
 				row.addCell('', 'sjo-version-op').addCell('');
 			}
@@ -479,7 +509,7 @@ function formatVersionChanges(dd) {
 	}
 	
 	function cleanData(data) {
-		return data.replace(/\\"/g, '"');
+		return data.replace(/\\"/g, '"').replace(/\\r\\n/g, '<br>');
 	}
 	
 }
@@ -488,8 +518,7 @@ function reparseVersions() {
 	
 	// Group versions by ID
 	var versionData = [];
-	var versionDataById = {}; // TODO: not used?
-	var numIds = 0;
+	var editsPerYear = [];
 	$('.full-version-json').each((index, element) => {
 		
 		// Parse and flatten version JSON
@@ -509,42 +538,49 @@ function reparseVersions() {
 		div.data({'sjo-version': version._version_id, 'sjo-person': version.id});
 		
 		// Add to list of versions
-		if (!versionDataById[version.id]) {
-			numIds++;
-			versionDataById[version.id] = [];
-		}
-		versionDataById[version.id].push(version);
 		versionData.push(version);
+		
+		// Count number of edits per year
+		var year = version._timestamp.substr(0, 4);
+		if (!editsPerYear[year]) editsPerYear[year] = 0;
+		editsPerYear[year]++;
 		
 	});
 	
 	// Sort versions
+	if (versionData.length === 0) return;
 	versionData.sort((a, b) => a._timestamp > b._timestamp);
-	console.log('reparseVersions', versionData);
+	console.log('reparseVersions', versionData, editsPerYear);
+	
+	// Create version tree table
+	var headerCellsHtml = editsPerYear.map((num, year) => 
+		num == 1 ? `<th></th><th>${year}</th>` : 
+		num ? `<th></th><th class="sjo-tree-year" colspan="${num * 2 - 1}"><span class="sjo-tree-year-inner">${year}</span></th>` : '');
+	var treeTable = $('<table class="sjo-tree"></table>')
+		.insertAfter('#sjo-section-versions')
+		.append('<thead><tr>' + headerCellsHtml.join('') + '</tr></thead>');
 	
 	// Build version tree
-	$('<table class="sjo-tree"></table>').insertAfter('#sjo-section-versions')
-		.append(('<tr><th></th>' + '<td></td>'.repeat(versionData.length * 2 - 1) + '</tr>').repeat(numIds));
-	var treeRow = -1;
 	var stack = [];
 	stack.push({'id': versionData[versionData.length - 1].id});
 	while (stack.length > 0) {
 		
-		// Pop an ID off the stack
-		treeRow++;
+		// Write a new table row
 		var currentId = stack.pop();
-		$('.sjo-tree tr').eq(treeRow).find('th').text(currentId.id);
+		var treeRow = $(`<tr><th>${currentId.id}</th>` + '<td></td>'.repeat(versionData.length * 2 - 1) + '</tr>').appendTo(treeTable);
+		var treeRowCells = treeRow.find('td');
+		
 		var minColNo = null, maxColNo = null, colNo = null;
 		var versionWritten = null;
-		var rowCells = $('.sjo-tree tr').eq(treeRow).find('td');
 		for (var sequenceNo = versionData.length - 1; sequenceNo >= 0; sequenceNo--) {
 			if (versionData[sequenceNo].id == currentId.id) {
 				
 				// Write this version to the tree
+				// TODO: display different icons for different actions, e.g. add/remove candidacy
 				colNo = sequenceNo * 2;
 				$(`<a class="sjo-tree-version">${versionData[sequenceNo]._version_id.substr(0, 4)}</a>`)
 					.data('sjo-tree-version', versionData[sequenceNo]._version_id)
-					.appendTo(rowCells.eq(sequenceNo * 2));
+					.appendTo(treeRowCells.eq(sequenceNo * 2));
 				
 				// Keep track of first and last versions for this ID
 				if (!minColNo || colNo < minColNo) minColNo = colNo;
@@ -564,12 +600,13 @@ function reparseVersions() {
 		}
 		
 		// Add the joining lines
-		rowCells.filter(`:lt(${maxColNo}):gt(${minColNo})`).filter((index, element) => element.innerHTML == '').addClass('sjo-tree-horiz');
+		treeRowCells.filter(`:lt(${maxColNo}):gt(${minColNo})`).filter((index, element) => element.innerHTML == '').addClass('sjo-tree-horiz');
 		if (maxColNo < versionData.length * 2 - 1) {
-			rowCells.filter(`:lt(${currentId.mergeColNo}):gt(${maxColNo})`).addClass('sjo-tree-horiz');
-			rowCells.eq(currentId.mergeColNo).addClass('sjo-tree-turnup');
-			for (var joinRow = treeRow - 1; joinRow >= 0; joinRow--) {
-				var joinCell = $('.sjo-tree tr').eq(joinRow).find('td').eq(currentId.mergeColNo);
+			treeRowCells.filter(`:lt(${currentId.mergeColNo}):gt(${maxColNo})`).addClass('sjo-tree-horiz');
+			treeRowCells.eq(currentId.mergeColNo).addClass('sjo-tree-turnup');
+			var treeRows = treeTable.find('tbody tr');
+			for (var joinRow = treeRows.length - 2; joinRow >= 0; joinRow--) {
+				var joinCell = treeRows.eq(joinRow).find('td').eq(currentId.mergeColNo);
 				if (joinCell.hasClass('sjo-tree-horiz')) {
 					joinCell.removeClass('sjo-tree-horiz').addClass('sjo-tree-mergein');
 					break;
@@ -590,6 +627,7 @@ function reparseVersions() {
 	});
 	
 	// Show selected version
+	// TODO: stop the page jumping
 	$('.sjo-tree').on('click', '.sjo-tree-version', event => {
 		var button = $(event.target);
 		var versionId = button.data('sjo-tree-version');
@@ -597,8 +635,10 @@ function reparseVersions() {
 		allVersions.not(selectedVersion).hide();
 		$('#sjo-versions-showall').show();
 		$('.sjo-tree-current').removeClass('sjo-tree-current');
-		button.addClass('sjo-tree-current')
+		button.addClass('sjo-tree-current');
 	});
+	
+	return;
 	
 	// For each ID, recompute diffs
 	// TODO: ignore some fields (e.g. Twitter ID)
@@ -606,6 +646,7 @@ function reparseVersions() {
 	$.each(versionData, (index, version) => {
 		
 		// Recompute diff
+		// TODO: this should be rendered obsolete by https://github.com/DemocracyClub/yournextrepresentative/pull/154
 		var diff = {};
 		$.each(version, (key, newValue) => {
 			if (key.substr(0, 1) == '_') return;
@@ -638,7 +679,7 @@ function reparseVersions() {
 		var div = allVersions.filter((index, element) => $(element).data('sjo-version') == version._version_id);
 		var versionTable = $('<table class="sjo-version"></table>').appendTo(div);
 		$.each(diff, (key, value) => {
-			addChangeRow(versionTable, key, value['old'], value['new'])
+			addChangeRow(versionTable, key, value['old'], value['new']);
 		});
 		
 	});
@@ -718,7 +759,7 @@ function formatAddCandidateButtons() {
 			var button = $('a', listitem).addClass('sjo-addperson-button');
 			
 			// Move the election name out of the button
-			var electionName = button.text().trim().match(/^Add .+? to the (The |Mayor of |City of |City and County of |Council of the |Comhairle nan )?(.+?)(( County| County Borough| Metropolitan Borough| City)? Council| Combined Authority)?( local election)?$/)[2];
+			var electionName = button.text().trim().match(/^Add .+? to the (\d{4} )?(The |Mayor of |City of |City and County of |Council of the |Comhairle nan )?(.+?)(( County| County Borough| Metropolitan Borough| City)? Council| Combined Authority)?( (local|mayoral) election)?$/)[3];
 			electionName = electionName == 'London Corporation' ? 'City of London' : electionName;
 			button.text('Add').after(` <a class="sjo-addperson-text" href="${button.attr('href')}">${electionName}</a>`);
 			
@@ -856,8 +897,7 @@ function formatEditForm() {
 		
 		// Trim party selection
 		if (input.is('.party-select')) {
-			var html = input.html();
-			input.html(html.replace(/\((\d+) candidates\)/g, '[$1]'));
+			formatPartySelects(input);
 		}
 		
 	}
@@ -944,6 +984,19 @@ function formatEditForm() {
 // Bulk adding pages
 // ================================================================
 
+function formatPartySelects(selector) {
+	
+	var selects = $(selector);
+	var html = selects.eq(0).html();
+	html = html.replace(/\((\d+) candidates\)/g, '[$1]');
+	if (knownPartiesOnly) {
+		html = html.replace(/<optgroup label="(.*?)">[^<]+(<option value="\d+">)[^<]+(<\/option>)[\s\S]*?<\/optgroup>/g, '$2$1$3');
+		html = html.replace(/<option value="\d+">[^<\[\]]+<\/option>/g, '');
+	}
+	selects.html(html);
+
+}
+
 function formatBulkAddPage() {
 	
 	// TODO: allow party dropdowns to be deselected
@@ -951,14 +1004,7 @@ function formatBulkAddPage() {
 	// Trim party selection
 	// TODO: make this a function
 	// TODO: allow deleted parties to be re-added
-	var partySelects = $('.party-select');
-	var html = partySelects.eq(0).html();
-	html = html.replace(/\((\d+) candidates\)/g, '[$1]');
-	if (knownPartiesOnly) {
-		html = html.replace(/<optgroup label="(.*?)">[^<]+(<option value="\d+">)[^<]+(<\/option>)[\s\S]*?<\/optgroup>/g, '$2$1$3');
-		html = html.replace(/<option value="\d+">[^<\[\]]+<\/option>/g, '');
-	}
-	partySelects.html(html);
+	formatPartySelects('.party-select');
 	
 	// Add a checkbox for reversed names
 	// TODO: add this to other edit pages
@@ -1025,6 +1071,16 @@ function formatBulkAddReviewPage() {
 // ================================================================
 // Results
 // ================================================================
+
+function formatResultsPostList() {
+	
+	$('.content .columns h3').each((index, element) => {
+		var heading = $(element);
+		heading.closest('div').find('a').after(' ' + element.innerText);
+		heading.hide();
+	});
+	
+}
 
 function formatResultsPage() {
 	
@@ -1098,6 +1154,9 @@ function formatRecentChanges() {
 		if (cells.eq(headings['User']).text() == username) {
 			row.addClass('sjo-mychanges');
 		}
+		
+		// Highlight important changes
+		row.addClass('sjo-changes-' + cells.eq(headings['Action']).text());
 		
 	});
 	
