@@ -2,7 +2,7 @@
 // @name        Democracy Club tweaks
 // @namespace   sjorford@gmail.com
 // @include     https://candidates.democracyclub.org.uk/*
-// @version     2017-05-08
+// @version     2017-05-10
 // @grant       none
 // @require     https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.12.0/moment.min.js
 // @require     https://raw.githubusercontent.com/sjorford/js/master/sjo-jq.js
@@ -58,14 +58,7 @@ $(`<style id="sjo-style-tweaks">
 	h3 {font-size: 1.2rem;}
 	#add_election_button {margin-bottom: 0;}
 	.person__versions {padding-top: 0;}
-	.sjo-version {border: none !important;}
-	.sjo-version tr {background: transparent !important; border-top: 1px solid white; vertical-align: top;}
-	.sjo-version th {width: 32%; padding: 0.25em 0.5em 0.25em 0; font-weight: normal;}
-	.sjo-version td {width: 32%; padding: 0.25em 0.5em;}
-	.sjo-version td.sjo-version-op {width: 2%;}
-	.sjo-version-delete {background-color: #fdd;}
-	.sjo-version-add {background-color: #dfd;}
-	.sjo-version-add.sjo-version-op {border-left: 1px solid white;}
+	
 	.sjo-results-label {float: left; width: 50%; height: 1.5rem; padding-top: 7px;}
 	.sjo-results-num {width: 100px !important; margin-bottom: 5px !important; text-align: right; -moz-appearance: textfield !important;}
 	.sjo-total-error {background-color: #fbb !important;}
@@ -171,6 +164,19 @@ $(`<style id="sjo-style-tweaks">
 	.sjo-tree-turnup {background: no-repeat url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAASdEVYdFNvZnR3YXJlAEdyZWVuc2hvdF5VCAUAAABOSURBVDhPY/wPBAx4ACMjI5QFAQSUMzBBaaqBUQMpB/Q1ED3JEANAOvAnLDQwuNMhIdeBANEGEmMYCBDMy6SCgQ1DYsCogZQDKhvIwAAApcUVF6f1O7gAAAAASUVORK5CYII=');}
 	.sjo-tree-vert {background: repeat-y url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAASdEVYdFNvZnR3YXJlAEdyZWVuc2hvdF5VCAUAAAAySURBVDhPY/wPBAx4ACMjI5QFAQSUMzBBaaqBUQMpB6MGUg5GDaQcjBpIORjsBjIwAAAaYgckACvF4gAAAABJRU5ErkJggg==');}
 	.sjo-tree-mergein {background: no-repeat  url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAoCAYAAAD+MdrbAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsQAAA7EAZUrDhsAAAASdEVYdFNvZnR3YXJlAEdyZWVuc2hvdF5VCAUAAABOSURBVEhLY/wPBAxUBExQmmpg1EDKweA3kBGIR9MhZYBgXmZkBAUzKsCnhWQXEipLRmCkjBpIORg1kHIwaiDlYNRAysGogZSDEWcgAwMAmLEPQjc8JtAAAAAASUVORK5CYII=');}
+	
+	.sjo-version {border: none !important;}
+	.sjo-version tr {background: transparent !important; border-top: 1px solid white; vertical-align: top;}
+	.sjo-version th {width: 32%; padding: 0.25em 0.5em 0.25em 0; font-weight: normal;}
+	.sjo-version td {width: 32%; padding: 0.25em 0.5em;}
+	.sjo-version td.sjo-version-op {width: 2%;}
+	.sjo-version-delete {background-color: #fdd;}
+	.sjo-version-add {background-color: #dfd;}
+	.sjo-version-add.sjo-version-op {border-left: 1px solid white;}
+	.sjo-version-delete del {text-decoration: none; background-color: gold;}
+	.sjo-version-delete ins {display: none;} 
+	.sjo-version-add ins {text-decoration: none; background-color: gold;}
+	.sjo-version-add del {display: none;} 
 	
 </style>`).appendTo('head');
 
@@ -455,57 +461,77 @@ function formatVersionChanges(dd) {
 	// TODO: indicate recent versions
 	var diffsPara = dd.find('.version-diff');
 	diffsPara.find('span').each(function(index, element) {
+		
 		var span = $(element);
 		var spanText = span.text().replace(/\n|\r/g, ' ');
+		var oldText = '', newText = '';
+		var fieldName = null;
 		
 		// Data added
 		if (span.hasClass('version-op-add')) {
 			var matchAdd = spanText.match(/^Added: (.+) => ["\[\{]([\s\S]*)["\]\}]$/);
-			if (matchAdd) {
-				addChangeRow(matchAdd[1], '', matchAdd[2], span);
-			}
+			if (matchAdd) [, fieldName, newText] = matchAdd;
 			
 		// Data replaced
 		} else if (span.hasClass('version-op-replace')) {
 			var matchReplace = spanText.match(/^At (.+) replaced ["\[\{](.*)["\]\}] with ["\[\{](.*)["\]\}]$/);
-			if (matchReplace) {
-				addChangeRow(matchReplace[1], matchReplace[2], matchReplace[3], span);
-			}
+			if (matchReplace) [, fieldName, oldText, newText] = matchReplace;
 			
 		// Data removed
 		} else if (span.hasClass('version-op-remove')) {
 			var matchDelete = spanText.match(/^Removed: (.+) \(previously it was ["\[\{](.*)["\]\}]\)$/); // TODO: null
-			if (matchDelete) {
-				addChangeRow(matchDelete[1], matchDelete[2], '', span);
-			}
+			if (matchDelete) [, fieldName, oldText] = matchDelete;
 			
 		}
+		
+		// Add to table
+		if (fieldName) addChangeRow(fieldName, oldText, newText, span);
 		
 	});
 	
 	// TODO: apply widths using colgroups
 	function addChangeRow(fieldName, dataFrom, dataTo, original) {
+		
 		if (dataFrom.length > 0 || dataTo.length > 0) {
+			
+			// Add a row to the diff table
 			var row = $('<tr></tr>').addHeader(fieldName.replace(/\//g, ' \u203A ')).appendTo(versionTable);
 			
-			if (dataFrom.length > 0) {
+			if (fieldName == 'biography' && dataFrom && dataTo) {
+				
+				// Add highlighted diffs for biographies
+				var diffMarkup = diffString(dataFrom, dataTo);
 				row.addCell('-', 'sjo-version-delete sjo-version-op')
-				   .addCellHTML(cleanData(dataFrom), 'sjo-version-delete');
+				   .addCellHTML(cleanData(diffMarkup), 'sjo-version-delete')
+				   .addCell('-', 'sjo-version-add sjo-version-op')
+				   .addCellHTML(cleanData(diffMarkup), 'sjo-version-add');
+				  
 			} else {
-				row.addCell('', 'sjo-version-op').addCell('');
+				
+				// Deleted value
+				if (dataFrom.length > 0) {
+					row.addCell('-', 'sjo-version-delete sjo-version-op')
+					   .addCellHTML(cleanData(dataFrom), 'sjo-version-delete');
+				} else {
+					row.addCell('', 'sjo-version-op').addCell('');
+				}
+				
+				// New value
+				if (dataTo.length > 0) {
+					row.addCell('-', 'sjo-version-add sjo-version-op')
+					   .addCellHTML(cleanData(dataTo), 'sjo-version-add');
+				} else {
+					row.addCell('', 'sjo-version-op').addCell('');
+				}
+				
 			}
-			
-			if (dataTo.length > 0) {
-				row.addCell('-', 'sjo-version-add sjo-version-op')
-				   .addCellHTML(cleanData(dataTo), 'sjo-version-add');
-			} else {
-				row.addCell('', 'sjo-version-op').addCell('');
-			}
-			
 			
 		}
+		
+		// Remove original diff
 		original.next('br').remove();
 		original.remove();
+		
 	}
 	
 	function cleanData(data) {
@@ -1091,8 +1117,9 @@ function formatResultsPage() {
 		.unwrap();
 	
 	// Check total
-	$('body').on('input', '.sjo-results-num', function(event) {
-		console.log(event.target);
+	$('body').on('input', '.sjo-results-num', validateResults);
+	
+	function validateResults() {
 		
 		// Get entered total
 		var totalCell = $('#id_num_turnout_reported');
@@ -1115,7 +1142,35 @@ function formatResultsPage() {
 			console.log('sum of votes', sumTotal, 'difference', sumTotal - enteredTotal);
 		}
 		
-	});
+	}
+	
+	// Paste values
+	$('<textarea id="sjo-results-paste"></textarea>').insertAfter('.container h1:first-of-type').on('paste', parsePastedResults);
+	
+	// TODO: add a checkbox to remember the source for next time
+	//$('#id_source').val('http://gis.worcestershire.gov.uk/website/Elections/result2017.aspx');
+	
+	function parsePastedResults(event) {
+		console.log(event);
+		
+		var text = event.originalEvent.clipboardData.getData('text');
+		console.log(text);
+		
+		$('.sjo-results-label').each((index, element) => {
+			var label = $(element);
+			var input = label.next('.sjo-results-num');
+			var name = label.text().match(/^(.*?)\s+\(/)[1];
+			var regex = new RegExp(name + '\\s+([^0-9]+\\s+)?(\\d+)', 'i');
+			var votesMatch = text.match(regex);
+			console.log(name, regex, votesMatch);
+			if (votesMatch) {
+				input.val(votesMatch[2]);
+			}
+		});
+		
+		validateResults();
+		
+	}
 	
 }
 
@@ -1330,4 +1385,111 @@ if (!String.prototype.fullTrim) {
 	String.prototype.fullTrim = function() {
 		return this.trim().replace(/(\s|\n|\r)+/g, ' ');
 	};
+}
+
+// Difference of two strings
+// https://johnresig.com/projects/javascript-diff-algorithm/
+function diffString( o, n ) {
+  
+  function escape(s) {
+    var n = s;
+    n = n.replace(/&/g, "&amp;");
+    n = n.replace(/</g, "&lt;");
+    n = n.replace(/>/g, "&gt;");
+    n = n.replace(/"/g, "&quot;");
+
+    return n;
+}
+  
+  function diff( o, n ) {
+  var ns = new Object();
+  var os = new Object();
+  
+  for ( var i = 0; i < n.length; i++ ) {
+    if ( ns[ n[i] ] == null )
+      ns[ n[i] ] = { rows: new Array(), o: null };
+    ns[ n[i] ].rows.push( i );
+  }
+  
+  for ( var i = 0; i < o.length; i++ ) {
+    if ( os[ o[i] ] == null )
+      os[ o[i] ] = { rows: new Array(), n: null };
+    os[ o[i] ].rows.push( i );
+  }
+  
+  for ( var i in ns ) {
+    if ( ns[i].rows.length == 1 && typeof(os[i]) != "undefined" && os[i].rows.length == 1 ) {
+      n[ ns[i].rows[0] ] = { text: n[ ns[i].rows[0] ], row: os[i].rows[0] };
+      o[ os[i].rows[0] ] = { text: o[ os[i].rows[0] ], row: ns[i].rows[0] };
+    }
+  }
+  
+  for ( var i = 0; i < n.length - 1; i++ ) {
+    if ( n[i].text != null && n[i+1].text == null && n[i].row + 1 < o.length && o[ n[i].row + 1 ].text == null && 
+         n[i+1] == o[ n[i].row + 1 ] ) {
+      n[i+1] = { text: n[i+1], row: n[i].row + 1 };
+      o[n[i].row+1] = { text: o[n[i].row+1], row: i + 1 };
+    }
+  }
+  
+  for ( var i = n.length - 1; i > 0; i-- ) {
+    if ( n[i].text != null && n[i-1].text == null && n[i].row > 0 && o[ n[i].row - 1 ].text == null && 
+         n[i-1] == o[ n[i].row - 1 ] ) {
+      n[i-1] = { text: n[i-1], row: n[i].row - 1 };
+      o[n[i].row-1] = { text: o[n[i].row-1], row: i - 1 };
+    }
+  }
+  
+  return { o: o, n: n };
+}
+  
+  
+  o = o.replace(/\s+$/, '');
+  n = n.replace(/\s+$/, '');
+
+  var out = diff(o == "" ? [] : o.split(/\s+/), n == "" ? [] : n.split(/\s+/) );
+  var str = "";
+
+  var oSpace = o.match(/\s+/g);
+  if (oSpace == null) {
+    oSpace = ["\n"];
+  } else {
+    oSpace.push("\n");
+  }
+  var nSpace = n.match(/\s+/g);
+  if (nSpace == null) {
+    nSpace = ["\n"];
+  } else {
+    nSpace.push("\n");
+  }
+
+  if (out.n.length == 0) {
+      for (var i = 0; i < out.o.length; i++) {
+        str += '<del>' + escape(out.o[i]) + oSpace[i] + "</del>";
+      }
+  } else {
+    if (out.n[0].text == null) {
+      for (n = 0; n < out.o.length && out.o[n].text == null; n++) {
+        str += '<del>' + escape(out.o[n]) + oSpace[n] + "</del>";
+      }
+    }
+
+    for ( var i = 0; i < out.n.length; i++ ) {
+      if (out.n[i].text == null) {
+        str += '<ins>' + escape(out.n[i]) + nSpace[i] + "</ins>";
+      } else {
+        var pre = "";
+
+        for (n = out.n[i].row + 1; n < out.o.length && out.o[n].text == null; n++ ) {
+          pre += '<del>' + escape(out.o[n]) + oSpace[n] + "</del>";
+        }
+        str += " " + out.n[i].text + nSpace[i] + pre;
+      }
+    }
+  }
+  
+  // sjorford
+  str = str.replace(/<\/ins><ins>/g, '');
+  
+  return str;
 }
