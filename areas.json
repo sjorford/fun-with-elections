@@ -7,7 +7,7 @@
 {"id":6,"area":"Ashford","type":"local","country":"EN","overlaps":[214,252,943,949],"pcc":252,"county":["Kent"]},
 {"id":7,"area":"Aylesbury Vale","type":"local","country":"EN","overlaps":[203,264,799,801],"pcc":264,"county":["Buckinghamshire"]},
 {"id":8,"area":"Babergh","type":"local","country":"EN","overlaps":[225,261,1075],"pcc":261,"county":["Suffolk"]},
-{"id":9,"area":"Barrow-in-Furness","type":"local","country":"EN","overlaps":[205,242,826],"pcc":242,"county":["Cumbria"]},
+{"id":9,"area":"Barrow","type":"local","country":"EN","overlaps":[205,242,826],"pcc":242,"county":["Cumbria"]},
 {"id":10,"area":"Basildon","type":"local","country":"EN","overlaps":[210,247,888,899,902],"pcc":247,"county":["Essex"]},
 {"id":11,"area":"Basingstoke and Deane","type":"local","country":"EN","overlaps":[212,249,913,922,923],"pcc":249,"county":["Hampshire"]},
 {"id":12,"area":"Bassetlaw","type":"local","country":"EN","overlaps":[221,259,1030,1034],"pcc":259,"county":["Nottinghamshire"]},
