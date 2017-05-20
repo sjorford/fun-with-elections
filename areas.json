@@ -1221,7 +1221,7 @@
 {"id":1240,"area":"Moray","type":"sp.c","country":"SC","overlaps":[1259,1284,1166],"pcc":1319,"county":["Scotland"]},
 {"id":1241,"area":"Na h-Eileanan an Iar","type":"sp.c","country":"SC","overlaps":[1259,1270,1168],"pcc":1319,"county":["Scotland"]},
 {"id":1242,"area":"North East Fife","type":"sp.c","country":"SC","overlaps":[1261,1279,1170],"pcc":1319,"county":["Scotland"]},
-{"id":1243,"area":"Orkney","type":"sp.c","country":"SC","overlaps":[1259,1287,1172],"pcc":1319,"county":["Scotland"]},
+{"id":1243,"area":"Orkney Islands","type":"sp.c","country":"SC","overlaps":[1259,1287,1172],"pcc":1319,"county":["Scotland"]},
 {"id":1244,"area":"Paisley","type":"sp.c","country":"SC","overlaps":[1262,1289,1173,1174],"pcc":1319,"county":["Scotland"]},
 {"id":1245,"area":"Perthshire North","type":"sp.c","country":"SC","overlaps":[1261,1288,1171,1175],"pcc":1319,"county":["Scotland"]},
 {"id":1246,"area":"Perthshire South and Kinross-shire","type":"sp.c","country":"SC","overlaps":[1261,1288,1171,1175],"pcc":1319,"county":["Scotland"]},
