@@ -1,4 +1,4 @@
-{"parties":{
+var parties = {
 "Official Monster Raving Loony Party":"MRL",
 "Conservative and Unionist Party":"Con",
 "UK Independence Party (UKIP)":"UKIP",
@@ -43,4 +43,4 @@
 "Alliance For Green Socialism":"AGS",
 "People Before Profit Alliance":"PBP",
 "Left Unity - Trade Unionists and Socialists":"TUSC"
-}}
+};

@@ -1,4 +1,4 @@
-{"election-types":[
+var electionTypes = [
 {"date":"2017-06-08","type":"parl","min":0,"max":0},
 {"date":"2017-06-08","type":"local","min":1,"max":2},
 {"date":"2017-05-11","type":"local","min":1,"max":2},
@@ -20,4 +20,4 @@
 {"date":"2016-05-05","type":"local","min":17,"max":18},
 {"date":"2015-05-07","type":"parl","min":19,"max":19},
 {"date":"2010-05-06","type":"parl","min":20,"max":20}
-]}
+];

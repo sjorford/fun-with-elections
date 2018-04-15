@@ -1,4 +1,4 @@
-{"areas":[
+var areas = [
 {"id":1,"area":"Adur","type":"local","country":"EN","overlaps":[228,263,1104],"pcc":263,"county":["West Sussex"]},
 {"id":2,"area":"Allerdale","type":"local","country":"EN","overlaps":[205,242,828,829,831],"pcc":242,"county":["Cumbria"]},
 {"id":3,"area":"Amber Valley","type":"local","country":"EN","overlaps":[206,243,832,837,840],"pcc":243,"county":["Derbyshire"]},
@@ -1293,4 +1293,4 @@
 {"id":1317,"area":"Welsh Assembly","type":"naw","country":"WA","overlaps":[],"pcc":1317,"county":["Wales"]},
 {"id":1319,"area":"Scottish Parliament","type":"sp","country":"SC","overlaps":[],"pcc":1319,"county":["Scotland"]},
 {"id":1321,"area":"Northern Ireland Assembly","type":"nia","country":"NI","overlaps":[],"pcc":1321,"county":["Northern Ireland"]}
-]}
+];
